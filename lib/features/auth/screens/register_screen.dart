@@ -1,200 +1,236 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class RegisterScreen extends StatelessWidget {
   const RegisterScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0x7FFFC83E), // Màu nền vàng nhạt giống Figma của bạn
-      body: SingleChildScrollView(
-        child: Center(
-          // FittedBox sẽ giúp cái khung 586px tự co lại cho vừa khít màn hình điện thoại
-          child: FittedBox(
-            fit: BoxFit.contain,
-            child: const Register(),
-          ),
-        ),
+    return const Scaffold(
+      backgroundColor: Color(0xFFF0A973), // Màu nền vàng đồng bộ
+      body: SafeArea(
+        child: Register(),
       ),
     );
   }
 }
 
-class Register extends StatelessWidget {
+class Register extends StatefulWidget {
   const Register({super.key});
 
   @override
+  State<Register> createState() => _RegisterState();
+}
+
+class _RegisterState extends State<Register> {
+  // 1. Tạo controller để lấy dữ liệu
+  final _emailController = TextEditingController();
+  final _userNameController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  // Biến trạng thái
+  bool _isLoading = false;
+  bool _isPasswordObscured = true;
+  bool _isConfirmPasswordObscured = true;
+
+  // 2. Hàm xử lý đăng ký với Firebase
+  Future<void> _signUp() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final confirm = _confirmPasswordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty || confirm.isEmpty) {
+      _showErrorSnackBar("Vui lòng nhập đầy đủ thông tin!");
+      return;
+    }
+    if (password != confirm) {
+      _showErrorSnackBar("Mật khẩu nhập lại không khớp!");
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Đăng ký thành công!"), backgroundColor: Colors.green),
+        );
+        // Chuyển về màn hình đăng nhập sau khi đăng ký xong
+        Navigator.pop(context);
+      }
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = "Đã xảy ra lỗi. Vui lòng thử lại.";
+      if (e.code == 'email-already-in-use') {
+        errorMessage = "Email này đã được đăng ký!";
+      } else if (e.code == 'weak-password') {
+        errorMessage = "Mật khẩu quá yếu (cần ít nhất 6 ký tự).";
+      } else if (e.code == 'invalid-email') {
+        errorMessage = "Định dạng Email không hợp lệ.";
+      }
+      _showErrorSnackBar(errorMessage);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _userNameController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 586,
-      height: 829,
-      clipBehavior: Clip.antiAlias,
-      decoration: ShapeDecoration(
-        color: Colors.white,
-        shape: RoundedRectangleBorder(
-          side: const BorderSide(width: 1),
-          borderRadius: BorderRadius.circular(45),
+    return Column(
+      children: [
+        // 1. Hình ảnh Logo (Đã thu nhỏ lại)
+        Container(
+          margin: const EdgeInsets.only(top: 20, bottom: 20),
+          width: 140,
+          height: 140,
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage("assets/images/logo.png"), // Dùng ảnh thật
+              fit: BoxFit.contain,
+            ),
+          ),
         ),
-        shadows: const [
-          BoxShadow(
-            color: Color(0x3F000000),
-            blurRadius: 4,
-            offset: Offset(4, 4),
-            spreadRadius: 0,
-          )
-        ],
-      ),
-      child: Stack(
-        children: [
-          // Phần nền vàng phía trên
-          Positioned(
-            left: 0,
-            top: 0,
-            child: Container(
-              width: 586,
-              height: 275,
-              decoration: const BoxDecoration(color: Color(0x7FFFC83E)),
-            ),
-          ),
-          // Khung trắng bo góc xanh phía dưới
-          Positioned(
-            left: 0,
-            top: 240,
-            child: Container(
-              width: 586,
-              height: 589,
-              decoration: ShapeDecoration(
-                color: Colors.white,
-                shape: RoundedRectangleBorder(
-                  side: const BorderSide(width: 2.50, color: Color(0xFF006DFF)),
-                  borderRadius: BorderRadius.circular(45),
-                ),
-              ),
-            ),
-          ),
-          // Ảnh Logo (Đang dùng ảnh tạm)
-          Positioned(
-            left: 152,
-            top: 43,
-            child: Container(
-              width: 285,
-              height: 157,
-              decoration: const BoxDecoration(
-                image: DecorationImage(
-                  image: NetworkImage("https://placehold.co/285x157"),
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-          ),
-          // Ô nhập Tên tài khoản
-          buildInputBox(top: 347),
-          // Ô nhập Mật khẩu
-          buildInputBox(top: 468),
-          // Ô nhập Lại mật khẩu
-          buildInputBox(top: 593),
 
-          // Nút Đăng ký
-          Positioned(
-            left: 166,
-            top: 718,
-            child: Container(
-              width: 254,
-              height: 52,
-              decoration: ShapeDecoration(
-                color: const Color(0xFFFA9200),
-                shape: RoundedRectangleBorder(
-                  side: const BorderSide(width: 2, strokeAlign: BorderSide.strokeAlignOutside),
-                  borderRadius: BorderRadius.circular(15),
-                ),
+        // 2. Thẻ trắng chứa Form (Tự động lấp đầy phần dưới và có thể cuộn)
+        Expanded(
+          child: Container(
+            width: double.infinity,
+            decoration: const ShapeDecoration(
+              color: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(45),
+                  topRight: Radius.circular(45),
+                ), // Chỉ bo góc trên
               ),
-              child: const Center(
-                child: Text(
-                  'Đăng Ký',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 25,
-                    fontFamily: 'Inter',
-                    fontWeight: FontWeight.w700,
+              shadows: [BoxShadow(color: Color(0x3F000000), blurRadius: 10, offset: Offset(0, 5))],
+            ),
+            // Bao bọc bằng SingleChildScrollView CHỈ cho phần chữ và ô nhập
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 30.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // a. Tiêu đề
+                  const Center(
+                    child: Column(
+                      children: [
+                        Text('Welcome !', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87)),
+                        SizedBox(height: 8),
+                        Text('Sign up', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w700, color: Color(0xFFDF5110))),
+                      ],
+                    ),
                   ),
-                ),
-              ),
-            ),
-          ),
-          // Các nhãn chữ (Labels)
-          buildLabel('Tên tài khoản:', 305, 100),
-          buildLabel('Mật khẩu:', 433, 94),
-          buildLabel('Nhập lại mật khẩu:', 553, 101),
+                  const SizedBox(height: 30),
 
-          // Tiêu đề chính
-          const Positioned(
-            left: 128,
-            top: 212,
-            child: Text(
-              'Đăng Ký Tài Khoản',
-              style: TextStyle(
-                color: Colors.black,
-                fontSize: 36,
-                fontFamily: 'Inter',
-                fontWeight: FontWeight.w700,
+                  // b. Các ô nhập liệu
+                  _buildInputField("Email", "Enter your email", _emailController, TextInputType.emailAddress),
+                  const SizedBox(height: 18),
+
+                  _buildInputField("User name", "Enter your user name", _userNameController, TextInputType.text),
+                  const SizedBox(height: 18),
+
+                  _buildInputField(
+                      "Password", "Enter your password", _passwordController, TextInputType.visiblePassword,
+                      isPassword: true,
+                      obscureText: _isPasswordObscured,
+                      onToggleVisibility: () => setState(() => _isPasswordObscured = !_isPasswordObscured)
+                  ),
+                  const SizedBox(height: 18),
+
+                  _buildInputField(
+                      "Confirm Password", "Confirm your password", _confirmPasswordController, TextInputType.visiblePassword,
+                      isPassword: true,
+                      obscureText: _isConfirmPasswordObscured,
+                      onToggleVisibility: () => setState(() => _isConfirmPasswordObscured = !_isConfirmPasswordObscured)
+                  ),
+                  const SizedBox(height: 40),
+
+                  // c. Nút Register
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _signUp,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFDF5110),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(55),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(width: 25, height: 25, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
+                        : const Text('Register', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // d. Nút quay lại trang Đăng Nhập
+                  Center(
+                    child: TextButton(
+                      onPressed: () {
+                        // Trở về trang trước đó
+                        Navigator.pop(context);
+                      },
+                      child: const Text("Already have an Account ?", style: TextStyle(color: Colors.black54, fontSize: 16)),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          // Hai cái đường kẻ trang trí ở giữa
-          buildDivider(left: 422, top: 268, width: 140),
-          buildDivider(left: 24, top: 268, width: 127),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  // Hàm bổ trợ để code ngắn gọn hơn
-  Widget buildInputBox({required double top}) {
-    return Positioned(
-      left: 95,
-      top: top,
-      child: Container(
-        width: 371,
-        height: 52,
-        decoration: ShapeDecoration(
-          color: Colors.white,
-          shape: RoundedRectangleBorder(
-            side: const BorderSide(width: 1, color: Color(0xFF906C12)),
+  // Hàm phụ trợ tạo ô nhập liệu
+  Widget _buildInputField(String label, String hintText, TextEditingController controller, TextInputType keyboardType, {bool isPassword = false, bool obscureText = false, VoidCallback? onToggleVisibility}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 8, bottom: 6),
+          child: Text(label, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.black87)),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(width: 1.5, color: const Color(0xFFDF5110)),
             borderRadius: BorderRadius.circular(15),
+            color: Colors.white,
+          ),
+          padding: const EdgeInsets.only(left: 15, right: 5),
+          child: TextField(
+            controller: controller,
+            obscureText: obscureText,
+            keyboardType: keyboardType,
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              hintText: hintText,
+              hintStyle: const TextStyle(color: Colors.black38, fontSize: 18),
+              suffixIcon: isPassword
+                  ? IconButton(icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: Colors.grey), onPressed: onToggleVisibility)
+                  : null,
+            ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget buildLabel(String text, double top, double left) {
-    return Positioned(
-      left: left,
-      top: top,
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: Colors.black,
-          fontSize: 25,
-          fontFamily: 'Inter',
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
-  Widget buildDivider({required double left, required double top, required double width}) {
-    return Positioned(
-      left: left,
-      top: top,
-      child: Container(
-        width: width,
-        decoration: const ShapeDecoration(
-          shape: RoundedRectangleBorder(
-            side: BorderSide(width: 1, strokeAlign: BorderSide.strokeAlignCenter),
-          ),
-        ),
-      ),
+      ],
     );
   }
 }
