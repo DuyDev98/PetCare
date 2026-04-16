@@ -61,31 +61,35 @@ class _LoginState extends State<Login> {
     }
   }
 
-  // 3. Hàm xử lý Đăng nhập bằng Google
-  // Biến cờ để đảm bảo GoogleSignIn chỉ khởi tạo 1 lần
-  bool _isGoogleInit = false;
+
 
   // 3. Hàm xử lý Đăng nhập bằng Google (Bản cập nhật v7.x)
+  // Khai báo biến này ở đầu class _LoginState nếu chưa có
+  bool _isGoogleInit = false;
+
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     try {
-      // 1. Ở bản v7, bắt buộc phải initialize() trước khi gọi các hàm khác
+      // 1. Ở bản v7, BẮT BUỘC phải truyền serverClientId vào initialize
       if (!_isGoogleInit) {
-        await GoogleSignIn.instance.initialize();
+        await GoogleSignIn.instance.initialize(
+          // Duy dán mã Web Client ID lấy từ Firebase vào đây nhé:
+          serverClientId: '668771715108-t2c483ohn8dqnj9h3k189a5ee22b5cn3.apps.googleusercontent.com',
+        );
         _isGoogleInit = true;
       }
 
-      // 2. Dùng authenticate() thay vì signIn()
+      // 2. Dùng authenticate() để bắt đầu quá trình chọn tài khoản
       final GoogleSignInAccount? googleUser = await GoogleSignIn.instance.authenticate();
       if (googleUser == null) {
         setState(() => _isLoading = false);
         return;
       }
 
-      // 3. Lấy thông tin xác thực (Ở bản v7, thuộc tính này không cần chữ 'await' nữa)
+      // 3. Lấy thông tin xác thực
       final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
-      // 4. Tạo Credential cho Firebase (Giờ chỉ cần truyền idToken là đủ)
+      // 4. Tạo Credential cho Firebase (Chỉ cần idToken là đủ)
       final credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
       );
@@ -94,23 +98,25 @@ class _LoginState extends State<Login> {
       await FirebaseAuth.instance.signInWithCredential(credential);
 
       _showSnackBar("Đăng nhập Google thành công!", Colors.green);
-      // TODO: Nhảy sang trang HomeScreen tại đây
+
+      // Chuyển sang màn hình chính của PetCare
+      // Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomeScreen()));
 
     } catch (e) {
-      _showSnackBar("Lỗi Google: Kiểm tra lại mạng hoặc mã SHA-1.", Colors.red);
+      _showSnackBar("Lỗi Google: Kiểm tra lại cấu hình Client ID hoặc SHA-1.", Colors.red);
       print("Error chi tiết: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
-  // Hàm hiển thị thông báo nhanh
+
+  // Hàm hiển thị thông báo (Giữ nguyên của Duy)
   void _showSnackBar(String message, Color color) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: color),
     );
   }
-
   @override
   void dispose() {
     _emailController.dispose();
