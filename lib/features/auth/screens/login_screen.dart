@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'register_screen.dart';
-import 'package:pet_care/features/home/services/pet_service.dart';
+import 'package:pet_care/data/services/pet_service.dart';
 import 'package:pet_care/features/home/screens/setup_profile_screen.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/custom_text_field.dart';
@@ -68,7 +69,7 @@ class _LoginState extends State<Login> {
     try {
       if (!_isGoogleInit) {
         await GoogleSignIn.instance.initialize(
-          serverClientId: '668771715108-t2c483ohn8dqnj9h3k189a5ee22b5cn3.apps.googleusercontent.com',
+          serverClientId: dotenv.env['GOOGLE_SERVER_CLIENT_ID'],
         );
         _isGoogleInit = true;
       }

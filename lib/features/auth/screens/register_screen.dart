@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart'; // 1. BẮT BUỘC THÊM THƯ VIỆN NÀY
-
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/custom_text_field.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../data/models/user_model.dart';
 class RegisterScreen extends StatelessWidget {
   const RegisterScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Color(0xFFF0A973), // Màu nền vàng đồng bộ
+      backgroundColor: AppColors.secondary,
       body: SafeArea(
         child: Register(),
       ),
@@ -24,28 +28,28 @@ class Register extends StatefulWidget {
 }
 
 class _RegisterState extends State<Register> {
-  // Controller để lấy dữ liệu
   final _emailController = TextEditingController();
   final _userNameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  // Biến trạng thái
   bool _isLoading = false;
   bool _isPasswordObscured = true;
   bool _isConfirmPasswordObscured = true;
-  bool _isGoogleInit = false; // Biến trạng thái cho Google (Giống hệt trang Login)
+  bool _isGoogleInit = false;
 
-  // Hàm xử lý đăng ký bằng Email
   Future<void> _signUp() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final confirm = _confirmPasswordController.text.trim();
+    // Bổ sung lấy tên người dùng từ ô nhập liệu
+    final userName = _userNameController.text.trim();
 
-    if (email.isEmpty || password.isEmpty || confirm.isEmpty) {
+    if (email.isEmpty || password.isEmpty || confirm.isEmpty || userName.isEmpty) {
       _showSnackBar("Vui lòng nhập đầy đủ thông tin!", Colors.red);
       return;
     }
+
     if (password != confirm) {
       _showSnackBar("Mật khẩu nhập lại không khớp!", Colors.red);
       return;
@@ -54,15 +58,31 @@ class _RegisterState extends State<Register> {
     setState(() => _isLoading = true);
 
     try {
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      // 1. Tạo tài khoản ở Firebase Auth
+      UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
+      // 2. Lấy UID (mã định danh duy nhất) vừa được cấp
+      String uid = userCredential.user!.uid;
+
+      // 3. Đổ dữ liệu vào Khuôn đúc UserModel
+      UserModel newUser = UserModel(
+        uid: uid,
+        email: email,
+        userName: userName,
+      );
+
+      // 4. Lưu thông tin chi tiết vào bảng 'users' trong Firestore
+      await FirebaseFirestore.instance.collection('users').doc(uid).set(newUser.toMap());
+
+      // Thành công thì thông báo và quay lại trang Login
       if (mounted) {
         _showSnackBar("Đăng ký thành công!", Colors.green);
-        Navigator.pop(context); // Chuyển về màn hình đăng nhập
+        Navigator.pop(context);
       }
+
     } on FirebaseAuthException catch (e) {
       String errorMessage = "Đã xảy ra lỗi. Vui lòng thử lại.";
       if (e.code == 'email-already-in-use') {
@@ -73,19 +93,20 @@ class _RegisterState extends State<Register> {
         errorMessage = "Định dạng Email không hợp lệ.";
       }
       _showSnackBar(errorMessage, Colors.red);
+    } catch (e) {
+      // Bắt thêm lỗi phòng trường hợp rớt mạng khi lưu Firestore
+      _showSnackBar("Lỗi hệ thống: $e", Colors.red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // 2. THÊM HÀM ĐĂNG KÝ BẰNG GOOGLE (Copy logic từ Login sang)
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     try {
       if (!_isGoogleInit) {
         await GoogleSignIn.instance.initialize(
-          // 👉 DUY NHỚ COPY MÃ TỪ LOGIN_SCREEN.DART DÁN VÀO ĐÂY NHÉ:
-          serverClientId: '668771715108-t2c483ohn8dqnj9h3k189a5ee22b5cn3.apps.googleusercontent.com',
+          serverClientId: dotenv.env['GOOGLE_SERVER_CLIENT_ID'],
         );
         _isGoogleInit = true;
       }
@@ -103,19 +124,17 @@ class _RegisterState extends State<Register> {
 
       await FirebaseAuth.instance.signInWithCredential(credential);
 
-      _showSnackBar("Đăng nhập Google thành công!", Colors.green);
-      // Chuyển về màn hình Login hoặc thẳng vào HomeScreen tùy bạn
-      if (mounted) Navigator.pop(context);
-
+      if (mounted) {
+        _showSnackBar("Đăng nhập Google thành công!", Colors.green);
+        Navigator.pop(context);
+      }
     } catch (e) {
       _showSnackBar("Lỗi Google: Kiểm tra lại cấu hình Client ID.", Colors.red);
-      print("Error chi tiết: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // Hàm hiển thị thông báo dùng chung
   void _showSnackBar(String message, Color color) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -136,7 +155,6 @@ class _RegisterState extends State<Register> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Hình ảnh Logo
         Container(
           margin: const EdgeInsets.only(top: 20, bottom: 20),
           width: 140,
@@ -148,145 +166,115 @@ class _RegisterState extends State<Register> {
             ),
           ),
         ),
-
-        // Thẻ trắng chứa Form
         Expanded(
           child: Container(
             width: double.infinity,
-            decoration: const ShapeDecoration(
-              color: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(45),
-                  topRight: Radius.circular(45),
-                ),
+            decoration: const BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(45),
+                topRight: Radius.circular(45),
               ),
-              shadows: [BoxShadow(color: Color(0x3F000000), blurRadius: 10, offset: Offset(0, 5))],
+              boxShadow: [
+                BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -5))
+              ],
             ),
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 30.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Tiêu đề
                   const Center(
                     child: Column(
                       children: [
-                        Text('Welcome !', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87)),
+                        Text('Welcome !', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.textBlack)),
                         SizedBox(height: 8),
-                        Text('Sign up', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w700, color: Color(0xFFDF5110))),
+                        Text('Sign up', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w700, color: AppColors.primary)),
                       ],
                     ),
                   ),
                   const SizedBox(height: 30),
-
-                  // Các ô nhập liệu
-                  _buildInputField("Email", "Enter your email", _emailController, TextInputType.emailAddress),
-                  const SizedBox(height: 18),
-
-                  _buildInputField("User name", "Enter your user name", _userNameController, TextInputType.text),
-                  const SizedBox(height: 18),
-
-                  _buildInputField(
-                      "Password", "Enter your password", _passwordController, TextInputType.visiblePassword,
-                      isPassword: true,
-                      obscureText: _isPasswordObscured,
-                      onToggleVisibility: () => setState(() => _isPasswordObscured = !_isPasswordObscured)
+                  CustomTextField(
+                    label: "Email",
+                    hintText: "Enter your email",
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
                   ),
                   const SizedBox(height: 18),
-
-                  _buildInputField(
-                      "Confirm Password", "Confirm your password", _confirmPasswordController, TextInputType.visiblePassword,
-                      isPassword: true,
-                      obscureText: _isConfirmPasswordObscured,
-                      onToggleVisibility: () => setState(() => _isConfirmPasswordObscured = !_isConfirmPasswordObscured)
+                  CustomTextField(
+                    label: "User name",
+                    hintText: "Enter your user name",
+                    controller: _userNameController,
+                  ),
+                  const SizedBox(height: 18),
+                  CustomTextField(
+                    label: "Password",
+                    hintText: "Enter your password",
+                    controller: _passwordController,
+                    isPassword: true,
+                    obscureText: _isPasswordObscured,
+                    onToggleVisibility: () => setState(() => _isPasswordObscured = !_isPasswordObscured),
+                  ),
+                  const SizedBox(height: 18),
+                  CustomTextField(
+                    label: "Confirm Password",
+                    hintText: "Confirm your password",
+                    controller: _confirmPasswordController,
+                    isPassword: true,
+                    obscureText: _isConfirmPasswordObscured,
+                    onToggleVisibility: () => setState(() => _isConfirmPasswordObscured = !_isConfirmPasswordObscured),
                   ),
                   const SizedBox(height: 40),
-
-                  // Nút Register
                   ElevatedButton(
                     onPressed: _isLoading ? null : _signUp,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFDF5110),
+                      backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(55),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      elevation: 3,
                     ),
                     child: _isLoading
                         ? const SizedBox(width: 25, height: 25, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
                         : const Text('Register', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(height: 20),
-
-                  // 3. THÊM NÚT GOOGLE Ở ĐÂY
                   const Center(
                     child: Text("OR", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                   const SizedBox(height: 20),
-
                   OutlinedButton(
                     onPressed: _isLoading ? null : _signInWithGoogle,
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(55),
-                      side: const BorderSide(color: Color(0xFFDF5110), width: 1.5),
+                      side: const BorderSide(color: AppColors.primary, width: 1.5),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('G', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.blue)),
-                        SizedBox(width: 12),
-                        Text('Sign up with Google', style: TextStyle(fontSize: 20, color: Colors.black87, fontWeight: FontWeight.w600)),
+                        Image.network(
+                          'https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg',
+                          width: 22,
+                          height: 22,
+                          errorBuilder: (context, error, stackTrace) => const Icon(Icons.g_mobiledata, size: 30, color: Colors.blue),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text('Sign up with Google', style: TextStyle(fontSize: 20, color: AppColors.textBlack, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // Nút quay lại trang Đăng Nhập
                   Center(
                     child: TextButton(
                       onPressed: () {
                         Navigator.pop(context);
                       },
-                      child: const Text("Already have an Account ?", style: TextStyle(color: Colors.black54, fontSize: 16)),
+                      child: const Text("Already have an Account ?", style: TextStyle(color: AppColors.textGrey, fontSize: 16)),
                     ),
                   ),
                 ],
               ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Hàm phụ trợ tạo ô nhập liệu (Giữ nguyên của bạn)
-  Widget _buildInputField(String label, String hintText, TextEditingController controller, TextInputType keyboardType, {bool isPassword = false, bool obscureText = false, VoidCallback? onToggleVisibility}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 8, bottom: 6),
-          child: Text(label, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.black87)),
-        ),
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(width: 1.5, color: const Color(0xFFDF5110)),
-            borderRadius: BorderRadius.circular(15),
-            color: Colors.white,
-          ),
-          padding: const EdgeInsets.only(left: 15, right: 5),
-          child: TextField(
-            controller: controller,
-            obscureText: obscureText,
-            keyboardType: keyboardType,
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              hintText: hintText,
-              hintStyle: const TextStyle(color: Colors.black38, fontSize: 18),
-              suffixIcon: isPassword
-                  ? IconButton(icon: Icon(obscureText ? Icons.visibility_off : Icons.visibility, color: Colors.grey), onPressed: onToggleVisibility)
-                  : null,
             ),
           ),
         ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/pet_service.dart';
+import '../../../data/services/pet_service.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/custom_text_field.dart';
 
@@ -18,6 +18,15 @@ class _SetupProfileScreenState extends State<SetupProfileScreen> {
   String? _selectedPetType;
   bool _isLoading = false;
   final PetService _petService = PetService();
+  final List<Map<String, String>> _petTypes = [
+    {'type': 'dog', 'icon': '🐶', 'label': 'Chó'},
+    {'type': 'cat', 'icon': '🐱', 'label': 'Mèo'},
+    {'type': 'bird', 'icon': '🐦', 'label': 'Chim'},
+    {'type': 'hamster', 'icon': '🐹', 'label': 'Hamster'},
+    {'type': 'fish', 'icon': '🐠', 'label': 'Cá'},
+    {'type': 'rabbit', 'icon': '🐰', 'label': 'Thỏ'},
+    {'type': 'other', 'icon': '🐾', 'label': 'Khác'},
+  ];
 
   @override
   void dispose() {
@@ -99,13 +108,15 @@ class _SetupProfileScreenState extends State<SetupProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _buildPetAvatar('dog', 'assets/images/dog.png'),
-                          const SizedBox(width: 40),
-                          _buildPetAvatar('cat','assets/images/cat.png'), // Nếu chưa có cat.png thì để null
-                        ],
+                      Center(
+                        child: Wrap(
+                          spacing: 20, // Khoảng cách ngang giữa các con vật
+                          runSpacing: 20, // Khoảng cách dọc (khi bị rớt dòng)
+                          alignment: WrapAlignment.center,
+                          children: _petTypes.map((pet) {
+                            return _buildPetTypeItem(pet['type']!, pet['icon']!, pet['label']!);
+                          }).toList(),
+                        ),
                       ),
                       const SizedBox(height: 30),
                       CustomTextField(
@@ -156,30 +167,36 @@ class _SetupProfileScreenState extends State<SetupProfileScreen> {
     );
   }
 
-  Widget _buildPetAvatar(String type, String? imagePath) {
+  Widget _buildPetTypeItem(String type, String icon, String label) {
     bool isSelected = _selectedPetType == type;
     return GestureDetector(
       onTap: () => setState(() => _selectedPetType = type),
-      child: Container(
-        width: 80,
-        height: 80,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: isSelected ? AppColors.primary.withAlpha(50) : Colors.grey[100],
-          border: Border.all(
-            color: isSelected ? AppColors.primary : Colors.transparent,
-            width: 3,
+      child: Column(
+        children: [
+          Container(
+            width: 65,
+            height: 65,
+            decoration: BoxDecoration(
+              color: isSelected ? const Color(0xFFDF5110).withOpacity(0.15) : Colors.grey.shade100,
+              shape: BoxShape.circle,
+              border: Border.all(
+                  color: isSelected ? const Color(0xFFDF5110) : Colors.transparent,
+                  width: 2.5
+              ),
+            ),
+            // Hiển thị Emoji ở giữa hình tròn
+            child: Center(child: Text(icon, style: const TextStyle(fontSize: 32))),
           ),
-        ),
-        child: ClipOval(
-          child: imagePath != null
-              ? Image.asset(
-                  imagePath,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.pets, size: 40, color: Colors.grey),
-                )
-              : const Icon(Icons.pets, size: 40, color: Colors.grey),
-        ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              color: isSelected ? const Color(0xFFDF5110) : Colors.black54,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }

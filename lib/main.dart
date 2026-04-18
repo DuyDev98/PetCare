@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-// 1. Đổi import từ register_screen.dart sang login_screen.dart
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:pet_care/features/auth/screens/login_screen.dart';
+import 'package:pet_care/features/home/screens/home_screen.dart';
 
 void main() async {
-  // 3. Phải gọi dòng này đầu tiên để Flutter chuẩn bị sẵn sàng
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 4. Bật công tắc khởi động Firebase
+  
+  // Load biến môi trường từ file .env
+  await dotenv.load(fileName: ".env");
+  
   await Firebase.initializeApp();
 
   runApp(const MyApp());
@@ -25,7 +27,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.orange),
         useMaterial3: true,
       ),
-      // 2. Gọi giao diện Đăng nhập làm màn hình khởi động
+      // Bạn có thể đổi lại thành LoginScreen() nếu muốn bắt người dùng đăng nhập trước
       home: const LoginScreen(),
     );
   }
