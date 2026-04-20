@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'register_screen.dart';
 import 'package:pet_care/data/services/pet_service.dart';
 import 'package:pet_care/features/home/screens/setup_profile_screen.dart';
+import 'package:pet_care/features/home/screens/home_screen.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/custom_text_field.dart';
 
@@ -37,6 +38,8 @@ class _LoginState extends State<Login> {
   bool _isPasswordObscured = true;
   bool _isGoogleInit = false;
 
+  final PetService _petService = PetService();
+
   Future<void> _signIn() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
@@ -49,12 +52,27 @@ class _LoginState extends State<Login> {
     setState(() => _isLoading = true);
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
+      
+      // Lưu thông tin User lên Firestore
+      if (userCredential.user != null) {
+        await _petService.saveUserInfo(userCredential.user!);
+      }
+
       _showSnackBar("Đăng nhập thành công!", Colors.green);
-      // TODO: Điều hướng vào HomeScreen
+      
+      // Kiểm tra xem đã có Pet Profile chưa
+      bool hasProfile = await _petService.checkUserProfileExists();
+      if (mounted) {
+        if (hasProfile) {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+        } else {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SetupProfileScreen()));
+        }
+      }
     } on FirebaseAuthException catch (e) {
       String msg = "Lỗi đăng nhập!";
       if (e.code == 'invalid-credential') msg = "Email hoặc mật khẩu không đúng.";
@@ -83,17 +101,23 @@ class _LoginState extends State<Login> {
       final GoogleSignInAuthentication googleAuth = googleUser.authentication;
       final credential = GoogleAuthProvider.credential(idToken: googleAuth.idToken);
 
-      await FirebaseAuth.instance.signInWithCredential(credential);
-      bool hasProfile = await PetService().checkUserProfileExists();
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+
+      // ĐẨY UID LÊN FIRESTORE NGAY KHI ĐĂNG NHẬP GOOGLE
+      if (userCredential.user != null) {
+        await _petService.saveUserInfo(userCredential.user!);
+      }
+
+      bool hasProfile = await _petService.checkUserProfileExists();
 
       if (mounted) {
+        _showSnackBar("Đăng nhập Google thành công!", Colors.green);
         if (hasProfile) {
-          // TODO: Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
         } else {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SetupProfileScreen()));
         }
       }
-      _showSnackBar("Đăng nhập Google thành công!", Colors.green);
     } catch (e) {
       _showSnackBar("Lỗi Google: Kiểm tra lại cấu hình Client ID hoặc SHA-1.", Colors.red);
     } finally {

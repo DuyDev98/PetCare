@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:pet_care/data/services/pet_service.dart';
+import 'package:pet_care/features/home/screens/setup_profile_screen.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/custom_text_field.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../data/models/user_model.dart';
+
 class RegisterScreen extends StatelessWidget {
   const RegisterScreen({super.key});
 
@@ -38,18 +39,18 @@ class _RegisterState extends State<Register> {
   bool _isConfirmPasswordObscured = true;
   bool _isGoogleInit = false;
 
+  final PetService _petService = PetService();
+
   Future<void> _signUp() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final confirm = _confirmPasswordController.text.trim();
-    // Bổ sung lấy tên người dùng từ ô nhập liệu
-    final userName = _userNameController.text.trim();
+    final username = _userNameController.text.trim();
 
-    if (email.isEmpty || password.isEmpty || confirm.isEmpty || userName.isEmpty) {
+    if (email.isEmpty || password.isEmpty || confirm.isEmpty || username.isEmpty) {
       _showSnackBar("Vui lòng nhập đầy đủ thông tin!", Colors.red);
       return;
     }
-
     if (password != confirm) {
       _showSnackBar("Mật khẩu nhập lại không khớp!", Colors.red);
       return;
@@ -58,44 +59,33 @@ class _RegisterState extends State<Register> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Tạo tài khoản ở Firebase Auth
+      // 1. Tạo tài khoản trên Firebase Auth
       UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      // 2. Lấy UID (mã định danh duy nhất) vừa được cấp
-      String uid = userCredential.user!.uid;
-
-      // 3. Đổ dữ liệu vào Khuôn đúc UserModel
-      UserModel newUser = UserModel(
-        uid: uid,
-        email: email,
-        userName: userName,
-      );
-
-      // 4. Lưu thông tin chi tiết vào bảng 'users' trong Firestore
-      await FirebaseFirestore.instance.collection('users').doc(uid).set(newUser.toMap());
-
-      // Thành công thì thông báo và quay lại trang Login
-      if (mounted) {
-        _showSnackBar("Đăng ký thành công!", Colors.green);
-        Navigator.pop(context);
+      // 2. LƯU THÔNG TIN VÀO FIRESTORE NGAY LẬP TỨC
+      if (userCredential.user != null) {
+        // Cập nhật tên hiển thị cho Firebase Auth trước
+        await userCredential.user!.updateDisplayName(username);
+        // Lưu vào Firestore
+        await _petService.saveUserInfo(userCredential.user!);
       }
 
+      if (mounted) {
+        _showSnackBar("Đăng ký thành công!", Colors.green);
+        // Sau khi đăng ký xong, dẫn người dùng đi tạo profile cho Pet luôn
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SetupProfileScreen()));
+      }
     } on FirebaseAuthException catch (e) {
       String errorMessage = "Đã xảy ra lỗi. Vui lòng thử lại.";
       if (e.code == 'email-already-in-use') {
         errorMessage = "Email này đã được đăng ký!";
       } else if (e.code == 'weak-password') {
         errorMessage = "Mật khẩu quá yếu (cần ít nhất 6 ký tự).";
-      } else if (e.code == 'invalid-email') {
-        errorMessage = "Định dạng Email không hợp lệ.";
       }
       _showSnackBar(errorMessage, Colors.red);
-    } catch (e) {
-      // Bắt thêm lỗi phòng trường hợp rớt mạng khi lưu Firestore
-      _showSnackBar("Lỗi hệ thống: $e", Colors.red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -118,15 +108,18 @@ class _RegisterState extends State<Register> {
       }
 
       final GoogleSignInAuthentication googleAuth = googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        idToken: googleAuth.idToken,
-      );
+      final credential = GoogleAuthProvider.credential(idToken: googleAuth.idToken);
 
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+
+      // LƯU THÔNG TIN GOOGLE USER VÀO FIRESTORE
+      if (userCredential.user != null) {
+        await _petService.saveUserInfo(userCredential.user!);
+      }
 
       if (mounted) {
         _showSnackBar("Đăng nhập Google thành công!", Colors.green);
-        Navigator.pop(context);
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SetupProfileScreen()));
       }
     } catch (e) {
       _showSnackBar("Lỗi Google: Kiểm tra lại cấu hình Client ID.", Colors.red);
