@@ -3,7 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:pet_care/features/auth/screens/login_screen.dart';
 import 'package:pet_care/features/home/screens/home_screen.dart';
-
+// import 'package:pet_care/core/utils/backend_test.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -11,6 +11,8 @@ void main() async {
   await dotenv.load(fileName: ".env");
   
   await Firebase.initializeApp();
+
+  // BackendTest.runAllTests();
 
   runApp(const MyApp());
 }
