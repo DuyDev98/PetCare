@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../logic/auth_controller.dart';
 import 'register_screen.dart';
 import 'package:pet_care/data/services/pet_service.dart';
 import 'package:pet_care/features/home/screens/setup_profile_screen.dart';
@@ -31,16 +29,25 @@ class Login extends StatefulWidget {
 }
 
 class _LoginState extends State<Login> {
+  // UI Controllers
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-
-  bool _isLoading = false;
   bool _isPasswordObscured = true;
-  bool _isGoogleInit = false;
 
+  // Logic Controller
+  final AuthController _authController = AuthController();
   final PetService _petService = PetService();
 
-  Future<void> _signIn() async {
+  @override
+  void initState() {
+    super.initState();
+    // Lắng nghe thay đổi từ controller (ví dụ: trạng thái loading)
+    _authController.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  Future<void> _handleSignIn() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -49,79 +56,35 @@ class _LoginState extends State<Login> {
       return;
     }
 
-    setState(() => _isLoading = true);
-
-    try {
-      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      
-      // Lưu thông tin User lên Firestore
-      if (userCredential.user != null) {
-        await _petService.saveUserInfo(userCredential.user!);
-      }
-
+    final error = await _authController.signIn(email, password);
+    
+    if (error == null) {
       _showSnackBar("Đăng nhập thành công!", Colors.green);
-      
-      // Kiểm tra xem đã có Pet Profile chưa
-      bool hasProfile = await _petService.checkUserProfileExists();
-      if (mounted) {
-        if (hasProfile) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
-        } else {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SetupProfileScreen()));
-        }
-      }
-    } on FirebaseAuthException catch (e) {
-      String msg = "Lỗi đăng nhập!";
-      if (e.code == 'invalid-credential') msg = "Email hoặc mật khẩu không đúng.";
-      _showSnackBar(msg, Colors.red);
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      _navigateToNextScreen();
+    } else {
+      _showSnackBar(error, Colors.red);
     }
   }
 
-  Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
-    try {
-      if (!_isGoogleInit) {
-        await GoogleSignIn.instance.initialize(
-          serverClientId: dotenv.env['GOOGLE_SERVER_CLIENT_ID'],
-        );
-        _isGoogleInit = true;
+  Future<void> _handleGoogleSignIn() async {
+    final error = await _authController.signInWithGoogle();
+    
+    if (error == null) {
+      _showSnackBar("Đăng nhập Google thành công!", Colors.green);
+      _navigateToNextScreen();
+    } else if (error != "Hủy đăng nhập") {
+      _showSnackBar(error, Colors.red);
+    }
+  }
+
+  void _navigateToNextScreen() async {
+    bool hasProfile = await _petService.checkUserProfileExists();
+    if (mounted) {
+      if (hasProfile) {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+      } else {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SetupProfileScreen()));
       }
-
-      final GoogleSignInAccount? googleUser = await GoogleSignIn.instance.authenticate();
-      if (googleUser == null) {
-        setState(() => _isLoading = false);
-        return;
-      }
-
-      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(idToken: googleAuth.idToken);
-
-      UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
-
-      // ĐẨY UID LÊN FIRESTORE NGAY KHI ĐĂNG NHẬP GOOGLE
-      if (userCredential.user != null) {
-        await _petService.saveUserInfo(userCredential.user!);
-      }
-
-      bool hasProfile = await _petService.checkUserProfileExists();
-
-      if (mounted) {
-        _showSnackBar("Đăng nhập Google thành công!", Colors.green);
-        if (hasProfile) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
-        } else {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SetupProfileScreen()));
-        }
-      }
-    } catch (e) {
-      _showSnackBar("Lỗi Google: Kiểm tra lại cấu hình Client ID hoặc SHA-1.", Colors.red);
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -136,11 +99,14 @@ class _LoginState extends State<Login> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _authController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final isLoading = _authController.isLoading;
+
     return Column(
       children: [
         Container(
@@ -207,7 +173,7 @@ class _LoginState extends State<Login> {
                   ),
                   const SizedBox(height: 20),
                   ElevatedButton(
-                    onPressed: _isLoading ? null : _signIn,
+                    onPressed: isLoading ? null : _handleSignIn,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
@@ -215,7 +181,7 @@ class _LoginState extends State<Login> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                       elevation: 3,
                     ),
-                    child: _isLoading
+                    child: isLoading
                         ? const SizedBox(width: 25, height: 25, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
                         : const Text('Login', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   ),
@@ -223,7 +189,7 @@ class _LoginState extends State<Login> {
                   const Center(child: Text("OR", style: TextStyle(color: Colors.black38, fontWeight: FontWeight.bold))),
                   const SizedBox(height: 25),
                   OutlinedButton(
-                    onPressed: _isLoading ? null : _signInWithGoogle,
+                    onPressed: isLoading ? null : _handleGoogleSignIn,
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(55),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
