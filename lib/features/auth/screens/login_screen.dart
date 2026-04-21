@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'register_screen.dart';
 import 'package:pet_care/data/services/pet_service.dart';
 import 'package:pet_care/features/home/screens/setup_profile_screen.dart';
+import 'package:pet_care/features/home/screens/home_screen.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/custom_text_field.dart';
 
@@ -54,7 +55,13 @@ class _LoginState extends State<Login> {
         password: password,
       );
       _showSnackBar("Đăng nhập thành công!", Colors.green);
-      // TODO: Điều hướng vào HomeScreen
+      
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+        );
+      }
     } on FirebaseAuthException catch (e) {
       String msg = "Lỗi đăng nhập!";
       if (e.code == 'invalid-credential') msg = "Email hoặc mật khẩu không đúng.";
@@ -88,9 +95,15 @@ class _LoginState extends State<Login> {
 
       if (mounted) {
         if (hasProfile) {
-          // TODO: Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+          );
         } else {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SetupProfileScreen()));
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const SetupProfileScreen()),
+          );
         }
       }
       _showSnackBar("Đăng nhập Google thành công!", Colors.green);
