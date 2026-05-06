@@ -20,14 +20,11 @@ class AuthController extends ChangeNotifier {
   Future<String?> signIn(String email, String password) async {
     _setLoading(true);
     try {
-      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
-      if (userCredential.user != null) {
-        await _petService.saveUserInfo(userCredential.user!);
-      }
-      return null; // Trả về null nếu thành công
+      return null; 
     } on FirebaseAuthException catch (e) {
       if (e.code == 'invalid-credential') return "Email hoặc mật khẩu không đúng.";
       return "Lỗi đăng nhập: ${e.message}";
@@ -37,7 +34,7 @@ class AuthController extends ChangeNotifier {
   }
 
   // Logic Đăng ký Email
-  Future<String?> signUp(String email, String password, String username) async {
+  Future<String?> signUp(String email, String password, String username, {String role = 'user'}) async {
     _setLoading(true);
     try {
       UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
@@ -46,7 +43,11 @@ class AuthController extends ChangeNotifier {
       );
       if (userCredential.user != null) {
         await userCredential.user!.updateDisplayName(username);
-        await _petService.saveUserInfo(userCredential.user!);
+        // FIX: Đã đổi sang named parameters trong PetService
+        await _petService.saveUserInfo(
+          role: role, 
+          displayName: username,
+        );
       }
       return null;
     } on FirebaseAuthException catch (e) {
@@ -79,7 +80,11 @@ class AuthController extends ChangeNotifier {
 
       UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
       if (userCredential.user != null) {
-        await _petService.saveUserInfo(userCredential.user!);
+        final existingRole = await _petService.getUserRole();
+        if (existingRole == null) {
+          // FIX: Đã đổi sang named parameters
+          await _petService.saveUserInfo(role: 'user');
+        }
       }
       return null;
     } catch (e) {

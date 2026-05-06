@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import '../logic/auth_controller.dart';
 import 'register_screen.dart';
+import 'role_selection_screen.dart'; // Import màn hình chọn vai trò
 import 'package:pet_care/data/services/pet_service.dart';
-import 'package:pet_care/features/home/screens/setup_profile_screen.dart';
-import 'package:pet_care/features/home/screens/home_screen.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/custom_text_field.dart';
+import '../../../core/widgets/custom_button.dart';
+import '../../../core/utils/ui_helpers.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -29,19 +30,15 @@ class Login extends StatefulWidget {
 }
 
 class _LoginState extends State<Login> {
-  // UI Controllers
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isPasswordObscured = true;
 
-  // Logic Controller
   final AuthController _authController = AuthController();
-  final PetService _petService = PetService();
 
   @override
   void initState() {
     super.initState();
-    // Lắng nghe thay đổi từ controller (ví dụ: trạng thái loading)
     _authController.addListener(() {
       if (mounted) setState(() {});
     });
@@ -52,17 +49,17 @@ class _LoginState extends State<Login> {
     final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      _showSnackBar("Vui lòng nhập đầy đủ thông tin!", Colors.orange);
+      UIHelpers.showSnackBar(context, "Vui lòng nhập đầy đủ thông tin!", isError: true);
       return;
     }
 
     final error = await _authController.signIn(email, password);
     
     if (error == null) {
-      _showSnackBar("Đăng nhập thành công!", Colors.green);
-      _navigateToNextScreen();
+      UIHelpers.showSnackBar(context, "Đăng nhập thành công!");
+      _navigateToRoleSelection();
     } else {
-      _showSnackBar(error, Colors.red);
+      UIHelpers.showSnackBar(context, error, isError: true);
     }
   }
 
@@ -70,29 +67,21 @@ class _LoginState extends State<Login> {
     final error = await _authController.signInWithGoogle();
     
     if (error == null) {
-      _showSnackBar("Đăng nhập Google thành công!", Colors.green);
-      _navigateToNextScreen();
+      UIHelpers.showSnackBar(context, "Đăng nhập Google thành công!");
+      _navigateToRoleSelection();
     } else if (error != "Hủy đăng nhập") {
-      _showSnackBar(error, Colors.red);
+      UIHelpers.showSnackBar(context, error ?? "Lỗi đăng nhập Google", isError: true);
     }
   }
 
-  void _navigateToNextScreen() async {
-    bool hasProfile = await _petService.checkUserProfileExists();
+  // Luôn chuyển đến màn hình chọn vai trò sau khi đăng nhập
+  void _navigateToRoleSelection() {
     if (mounted) {
-      if (hasProfile) {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()));
-      } else {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SetupProfileScreen()));
-      }
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+      );
     }
-  }
-
-  void _showSnackBar(String message, Color color) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
-    );
   }
 
   @override
@@ -172,18 +161,10 @@ class _LoginState extends State<Login> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: isLoading ? null : _handleSignIn,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(55),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      elevation: 3,
-                    ),
-                    child: isLoading
-                        ? const SizedBox(width: 25, height: 25, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
-                        : const Text('Login', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  CustomButton(
+                    text: 'Login',
+                    isLoading: isLoading,
+                    onPressed: _handleSignIn,
                   ),
                   const SizedBox(height: 25),
                   const Center(child: Text("OR", style: TextStyle(color: Colors.black38, fontWeight: FontWeight.bold))),
