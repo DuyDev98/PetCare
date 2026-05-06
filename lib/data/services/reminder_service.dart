@@ -4,62 +4,89 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/reminder_model.dart';
 
 class ReminderService {
-  final CollectionReference _db = FirebaseFirestore.instance.collection('reminders');
+  final CollectionReference _db =
+  FirebaseFirestore.instance.collection('reminders');
 
-  // Lấy UID của người dùng từ FirebaseAuth
   String get _uid => FirebaseAuth.instance.currentUser?.uid ?? '';
 
-  // LOGIC TRANG 2: THÊM NHẮC NHỞ
+  // ── Tạo nhắc nhở mới ─────────────────────────────────────
   Future<void> createReminder({
     required String title,
     required DateTime dateTime,
-    required String type,
-    String? notes,
-    String? status, // Thêm dòng này
+    required ReminderType type,
+    required String petId,
+    required String petName,
+    required String petBreed,
+    String notes  = '',
+    String status = 'pending',
   }) async {
     await _db.add({
-      'userId': _uid, // Gắn ID người dùng để bảo mật
-      'title': title,
+      'userId':    _uid,
+      'title':     title,
       'timestamp': Timestamp.fromDate(dateTime),
-      'type': type,
-      'notes': notes ?? '',
-      'status': status ?? 'pending',
+      'type':      type.firestoreKey,
+      'notes':     notes,
+      'status':    status,
+      'petId':     petId,
+      'petName':   petName,
+      'petBreed':  petBreed,
     });
   }
 
-  // LOGIC TRANG 1: LẤY DANH SÁCH THEO NGÀY (Sửa lỗi named arguments)
-  Stream<List<ReminderModel>> getRemindersByDate(DateTime date) {
-    DateTime start = DateTime(date.year, date.month, date.day, 0, 0, 0);
-    DateTime end = DateTime(date.year, date.month, date.day, 23, 59, 59);
+  // ── Lấy danh sách theo ngày, tuỳ chọn lọc theo pet ───────
+  Stream<List<ReminderModel>> getRemindersByDate(
+      DateTime date, {
+        String? petId,
+      }) {
+    final start = DateTime(date.year, date.month, date.day, 0, 0, 0);
+    final end   = DateTime(date.year, date.month, date.day, 23, 59, 59);
 
-    return _db
-        .where('userId', isEqualTo: _uid) // Sửa: Dùng isEqualTo thay vì '=='
+    Query query = _db
+        .where('userId',    isEqualTo: _uid)
         .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
-        .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(end))
-        .orderBy('timestamp', descending: false)
-        .snapshots()
-        .map((snap) => snap.docs
-        .map((doc) => ReminderModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .where('timestamp', isLessThanOrEqualTo:    Timestamp.fromDate(end))
+        .orderBy('timestamp');
+
+    if (petId != null && petId.isNotEmpty) {
+      query = query.where('petId', isEqualTo: petId);
+    }
+
+    return query.snapshots().map((snap) => snap.docs
+        .map((d) => ReminderModel.fromMap(
+        d.data() as Map<String, dynamic>, d.id))
         .toList());
   }
 
-  // LOGIC TRANG 3: LẤY DANH SÁCH QUÁ HẠN (Sửa lỗi positional arguments)
+  // ── Lấy danh sách quá hạn ────────────────────────────────
   Stream<List<ReminderModel>> getOverdueReminders() {
     return _db
-        .where('userId', isEqualTo: _uid) // Sửa: isEqualTo
-        .where('status', isEqualTo: 'pending') // Sửa: isEqualTo
+        .where('userId', isEqualTo: _uid)
+        .where('status', isEqualTo: 'pending')
         .where('timestamp', isLessThan: Timestamp.fromDate(DateTime.now()))
         .snapshots()
         .map((snap) => snap.docs
-        .map((doc) => ReminderModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .map((d) => ReminderModel.fromMap(
+        d.data() as Map<String, dynamic>, d.id))
         .toList());
   }
 
-  // LOGIC NÚT RESCHEDULE: CẬP NHẬT GIỜ MỚI
+  // ── Toggle done / pending ─────────────────────────────────
+  Future<void> toggleReminder(String docId, bool isDone) async {
+    await _db.doc(docId).update({
+      'status': isDone ? 'done' : 'pending',
+    });
+  }
+
+  // ── Reschedule ────────────────────────────────────────────
   Future<void> reschedule(String docId, DateTime newTime) async {
     await _db.doc(docId).update({
       'timestamp': Timestamp.fromDate(newTime),
-      'status': 'pending',
+      'status':    'pending',
     });
+  }
+
+  // ── Xoá ──────────────────────────────────────────────────
+  Future<void> deleteReminder(String docId) async {
+    await _db.doc(docId).delete();
   }
 }

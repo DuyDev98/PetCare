@@ -14,7 +14,7 @@ import 'package:pet_care/features/home/screens/profile_screen.dart';
 import 'package:pet_care/features/home/screens/pet_details_screen.dart';
 import 'package:pet_care/features/home/screens/add_reminder_screen.dart';
 import 'package:flutter/material.dart';
-
+import 'package:pet_care/features/home/screens/reminders_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -41,7 +41,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       // Bạn có thể đổi lại thành LoginScreen() nếu muốn bắt người dùng đăng nhập trước
-      home: const HomeScreen(),
+      home: const CalendarScreen(),
     );
   }
 }
