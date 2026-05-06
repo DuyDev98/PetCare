@@ -12,7 +12,7 @@ class PetService {
   String get _cloudName => dotenv.env['CLOUDINARY_CLOUD_NAME'] ?? "";
   String get _uploadPreset => dotenv.env['CLOUDINARY_UPLOAD_PRESET'] ?? "";
 
-  // 1. Lưu thông tin User (Named Parameters)
+  // 1. Lưu thông tin User
   Future<void> saveUserInfo({String? role, String? displayName, String? photoURL}) async {
     User? user = _auth.currentUser;
     if (user == null) return;
@@ -25,25 +25,20 @@ class PetService {
       if (role != null) data['role'] = role;
       if (displayName != null) data['displayName'] = displayName;
       if (photoURL != null) data['photoURL'] = photoURL;
-
       await _firestore.collection('users').doc(user.uid).set(data, SetOptions(merge: true));
     } catch (e) {
       print("[PetService] Lỗi lưu userInfo: $e");
     }
   }
 
-  // 2. Tải ảnh lên Cloudinary
+  // 2. Upload to Cloudinary
   Future<String?> uploadToCloudinary(File file) async {
-    if (_cloudName.isEmpty || _uploadPreset.isEmpty) {
-      print("[PetService] Lỗi: Chưa cấu hình Cloudinary trong .env");
-      return null;
-    }
+    if (_cloudName.isEmpty || _uploadPreset.isEmpty) return null;
     try {
       final url = Uri.parse("https://api.cloudinary.com/v1_1/$_cloudName/image/upload");
       var request = http.MultipartRequest("POST", url);
       request.fields['upload_preset'] = _uploadPreset;
       request.files.add(await http.MultipartFile.fromPath('file', file.path));
-
       var response = await request.send().timeout(const Duration(seconds: 30));
       if (response.statusCode == 200) {
         var responseData = await response.stream.toBytes();
@@ -53,7 +48,6 @@ class PetService {
       }
       return null;
     } catch (e) {
-      print("[PetService] Lỗi upload: $e");
       return null;
     }
   }
@@ -70,29 +64,7 @@ class PetService {
     }
   }
 
-  // 4. Lấy Role
-  Future<String?> getUserRole() async {
-    final data = await getCurrentUserData();
-    return data?['role'] as String?;
-  }
-
-  // 5. Kiểm tra hồ sơ thú cưng
-  Future<bool> checkUserProfileExists() async {
-    User? user = _auth.currentUser;
-    if (user == null) return false;
-    try {
-      QuerySnapshot snapshot = await _firestore
-          .collection('pets')
-          .where('ownerId', isEqualTo: user.uid)
-          .limit(1)
-          .get();
-      return snapshot.docs.isNotEmpty;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // 6. Lấy danh sách thú cưng
+  // 4. Lấy danh sách thú cưng (Sắp xếp mới nhất lên đầu)
   Future<List<Map<String, dynamic>>> getMyPets() async {
     User? user = _auth.currentUser;
     if (user == null) return [];
@@ -108,7 +80,7 @@ class PetService {
         return data;
       }).toList();
     } catch (e) {
-      print("[PetService] Lỗi lấy danh sách thú cưng: $e");
+      // Fallback: Lấy không sắp xếp nếu Index chưa tạo
       QuerySnapshot snapshot = await _firestore
           .collection('pets')
           .where('ownerId', isEqualTo: user.uid)
@@ -121,7 +93,7 @@ class PetService {
     }
   }
 
-  // 7. Tạo hồ sơ thú cưng
+  // 5. Tạo mới hồ sơ thú cưng
   Future<bool> createPetProfile({
     required String name,
     required String age,
@@ -140,6 +112,56 @@ class PetService {
         'createdAt': FieldValue.serverTimestamp(),
       });
       return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // 6. Chỉnh sửa thông tin thú cưng
+  Future<bool> updatePetProfile({
+    required String petId,
+    required String name,
+    required String age,
+    required String type,
+    String? imageUrl,
+  }) async {
+    try {
+      Map<String, dynamic> data = {
+        'name': name,
+        'age': age,
+        'type': type,
+      };
+      if (imageUrl != null) data['avatarUrl'] = imageUrl;
+      await _firestore.collection('pets').doc(petId).update(data);
+      return true;
+    } catch (e) {
+      print("[PetService] Lỗi cập nhật pet: $e");
+      return false;
+    }
+  }
+
+  // 7. Xóa thú cưng
+  Future<bool> deletePetProfile(String petId) async {
+    try {
+      await _firestore.collection('pets').doc(petId).delete();
+      return true;
+    } catch (e) {
+      print("[PetService] Lỗi xóa pet: $e");
+      return false;
+    }
+  }
+
+  Future<String?> getUserRole() async {
+    final data = await getCurrentUserData();
+    return data?['role'] as String?;
+  }
+
+  Future<bool> checkUserProfileExists() async {
+    User? user = _auth.currentUser;
+    if (user == null) return false;
+    try {
+      QuerySnapshot snapshot = await _firestore.collection('pets').where('ownerId', isEqualTo: user.uid).limit(1).get();
+      return snapshot.docs.isNotEmpty;
     } catch (e) {
       return false;
     }
