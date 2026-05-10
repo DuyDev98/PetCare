@@ -6,8 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:pet_care/data/services/pet_service.dart';
 import 'package:pet_care/features/home/screens/home_screen.dart';
 import 'package:pet_care/features/auth/screens/login_screen.dart';
-import 'package:pet_care/features/auth/screens/role_selection_screen.dart';
-import 'package:pet_care/features/partner/screens/partner_home_screen.dart';
+import 'package:pet_care/features/home/screens/setup_profile_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,47 +41,30 @@ class AuthWrapper extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // 1. Nếu chưa đăng nhập -> Màn hình Login
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
         
+        // 1. Nếu chưa đăng nhập -> Màn hình Login
         if (!snapshot.hasData) {
           return const LoginScreen();
         }
 
-        // 2. Nếu đã đăng nhập -> Kiểm tra Role/Profile
-        return FutureBuilder<Map<String, dynamic>?>(
-          future: PetService().getCurrentUserData(),
-          builder: (context, userSnapshot) {
-            if (userSnapshot.connectionState == ConnectionState.waiting) {
+        // 2. Nếu đã đăng nhập -> Kiểm tra xem đã có thú cưng chưa
+        return FutureBuilder<bool>(
+          future: PetService().checkUserProfileExists(),
+          builder: (context, petSnapshot) {
+            if (petSnapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(body: Center(child: CircularProgressIndicator()));
             }
-
-            final userData = userSnapshot.data;
-            if (userData == null || userData['role'] == null) {
-              return const RoleSelectionScreen();
+            
+            if (petSnapshot.data == true) {
+              // Đã có pet -> Vào trang chủ
+              return const HomeScreen();
+            } else {
+              // Chưa có pet -> Vào trang setup pet
+              return const SetupProfileScreen();
             }
-
-            if (userData['role'] == 'partner') {
-              return const PartnerHomeScreen();
-            }
-
-            // Nếu là user, kiểm tra xem đã có pet chưa
-            return FutureBuilder<bool>(
-              future: PetService().checkUserProfileExists(),
-              builder: (context, petSnapshot) {
-                if (petSnapshot.connectionState == ConnectionState.waiting) {
-                  return const Scaffold(body: Center(child: CircularProgressIndicator()));
-                }
-                
-                if (petSnapshot.data == true) {
-                  return const HomeScreen();
-                } else {
-                  return const RoleSelectionScreen();
-                }
-              },
-            );
           },
         );
       },

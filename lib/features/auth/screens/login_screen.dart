@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../logic/auth_controller.dart';
 import 'register_screen.dart';
-import 'role_selection_screen.dart'; // Import màn hình chọn vai trò
-import 'package:pet_care/data/services/pet_service.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/custom_text_field.dart';
 import '../../../core/widgets/custom_button.dart';
@@ -57,7 +55,7 @@ class _LoginState extends State<Login> {
     
     if (error == null) {
       UIHelpers.showSnackBar(context, "Đăng nhập thành công!");
-      _navigateToRoleSelection();
+      // AuthWrapper trong main.dart sẽ tự động điều hướng
     } else {
       UIHelpers.showSnackBar(context, error, isError: true);
     }
@@ -68,19 +66,9 @@ class _LoginState extends State<Login> {
     
     if (error == null) {
       UIHelpers.showSnackBar(context, "Đăng nhập Google thành công!");
-      _navigateToRoleSelection();
+      // AuthWrapper trong main.dart sẽ tự động điều hướng
     } else if (error != "Hủy đăng nhập") {
       UIHelpers.showSnackBar(context, error ?? "Lỗi đăng nhập Google", isError: true);
-    }
-  }
-
-  // Luôn chuyển đến màn hình chọn vai trò sau khi đăng nhập
-  void _navigateToRoleSelection() {
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
-      );
     }
   }
 

@@ -1,45 +1,45 @@
-// lib/data/models/reminder_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+enum ReminderType { bath, vaccine, feed, checkup, walk, other }
 
 class ReminderModel {
   final String id;
-  final String userId; // - Dùng chung định dạng uid
   final String title;
   final DateTime timestamp;
-  final String type;
-  final String notes;
-  final String status;
+  final ReminderType type;
+  final String? imageUrl; // Trường lưu ảnh kỷ niệm
+  final bool isCompleted;
 
   ReminderModel({
     required this.id,
-    required this.userId,
     required this.title,
     required this.timestamp,
     required this.type,
-    required this.notes,
-    required this.status,
+    this.imageUrl,
+    this.isCompleted = false,
   });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'userId': userId,
-      'title': title,
-      'timestamp': Timestamp.fromDate(timestamp),
-      'type': type,
-      'notes': notes,
-      'status': status,
-    };
-  }
 
   factory ReminderModel.fromMap(Map<String, dynamic> map, String docId) {
     return ReminderModel(
       id: docId,
-      userId: map['userId'] ?? '',
       title: map['title'] ?? '',
       timestamp: (map['timestamp'] as Timestamp).toDate(),
-      type: map['type'] ?? 'other',
-      notes: map['notes'] ?? '',
-      status: map['status'] ?? 'pending',
+      type: ReminderType.values.firstWhere(
+        (e) => e.toString() == map['type'],
+        orElse: () => ReminderType.other,
+      ),
+      imageUrl: map['imageUrl'],
+      isCompleted: map['isCompleted'] ?? false,
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'title': title,
+      'timestamp': Timestamp.fromDate(timestamp),
+      'type': type.toString(),
+      'imageUrl': imageUrl,
+      'isCompleted': isCompleted,
+    };
   }
 }
