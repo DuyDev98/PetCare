@@ -59,7 +59,6 @@ class TaskCard extends StatelessWidget {
             trailing: _getIconForType(task.type),
           ),
           
-          // HIỂN THỊ KỶ NIỆM (ẢNH)
           if (task.imageUrl != null && task.imageUrl!.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),

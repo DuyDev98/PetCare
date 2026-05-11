@@ -4,8 +4,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pet_care/data/services/pet_service.dart';
-import 'package:pet_care/features/home/screens/home_screen.dart';
 import 'package:pet_care/features/auth/screens/login_screen.dart';
+import 'package:pet_care/features/home/screens/home_screen.dart';
 import 'package:pet_care/features/home/screens/setup_profile_screen.dart';
 
 void main() async {
@@ -44,25 +44,24 @@ class AuthWrapper extends StatelessWidget {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
-        
+
         // 1. Nếu chưa đăng nhập -> Màn hình Login
         if (!snapshot.hasData) {
           return const LoginScreen();
         }
 
-        // 2. Nếu đã đăng nhập -> Kiểm tra xem đã có thú cưng chưa
+        // 2. Nếu đã đăng nhập -> Kiểm tra xem đã tạo thú cưng chưa (Bỏ qua chọn vai trò)
         return FutureBuilder<bool>(
           future: PetService().checkUserProfileExists(),
           builder: (context, petSnapshot) {
             if (petSnapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(body: Center(child: CircularProgressIndicator()));
             }
-            
+
             if (petSnapshot.data == true) {
-              // Đã có pet -> Vào trang chủ
               return const HomeScreen();
             } else {
-              // Chưa có pet -> Vào trang setup pet
+              // Nếu chưa có pet -> Vào thẳng trang tạo hồ sơ
               return const SetupProfileScreen();
             }
           },

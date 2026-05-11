@@ -166,4 +166,57 @@ class PetService {
       return false;
     }
   }
+
+  // --- HỒ SƠ Y TẾ (MEDICAL RECORDS) ---
+
+  // Lấy stream danh sách hồ sơ y tế của một thú cưng
+  Stream<QuerySnapshot> getMedicalRecordsStream(String petId) {
+    return _firestore
+        .collection('medical_records')
+        .where('petId', isEqualTo: petId)
+        .orderBy('date', descending: true)
+        .snapshots();
+  }
+
+  // Thêm hồ sơ y tế mới
+  Future<bool> addMedicalRecord({
+    required String petId,
+    required String recordType,
+    required DateTime date,
+    required String title,
+    required String clinicName,
+    required String note,
+    String? imageUrl,
+  }) async {
+    User? user = _auth.currentUser;
+    if (user == null) return false;
+    try {
+      await _firestore.collection('medical_records').add({
+        'petId': petId,
+        'userId': user.uid,
+        'recordType': recordType,
+        'date': Timestamp.fromDate(date),
+        'title': title,
+        'clinicName': clinicName,
+        'note': note,
+        'imageUrl': imageUrl ?? '',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      return true;
+    } catch (e) {
+      print("[PetService] Lỗi thêm hồ sơ y tế: $e");
+      return false;
+    }
+  }
+
+  // Xóa hồ sơ y tế
+  Future<bool> deleteMedicalRecord(String recordId) async {
+    try {
+      await _firestore.collection('medical_records').doc(recordId).delete();
+      return true;
+    } catch (e) {
+      print("[PetService] Lỗi xóa hồ sơ y tế: $e");
+      return false;
+    }
+  }
 }

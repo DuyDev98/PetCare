@@ -5,6 +5,9 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/custom_bottom_nav_bar.dart';
 import 'setup_profile_screen.dart';
 import 'settings_screen.dart';
+import 'calendar_screen.dart';
+import '../../medical_records/screens/medical_history_screen.dart';
+import 'community_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -58,7 +61,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
+    // Danh sách các màn hình tương ứng với Bottom Nav Bar
+    final List<Widget> pages = [
+      _buildHomeContent(), // Tab 0: Trang chủ
+      const Center(child: Text('Dịch vụ (Coming Soon)')), // Tab 1: Dịch vụ
+      const CalendarScreen(), // Tab 2: Lịch
+      _buildMedicalTab(), // Tab 3: Khám bệnh
+      const CommunityScreen(), // Tab 4: Cộng đồng
+    ];
 
     if (_isLoading) {
       return const Scaffold(
@@ -68,53 +78,73 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFAF8F5),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadData,
-          color: AppColors.primary,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Stack(
-              children: [
-                Positioned(
-                  right: -screenWidth * 0.2,
-                  top: -screenWidth * 0.2,
-                  child: Container(
-                    width: screenWidth * 0.5,
-                    height: screenWidth * 0.5,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildHeader(),
-                      const SizedBox(height: 25),
-                      _buildMyPetsSection(screenWidth),
-                      const SizedBox(height: 25),
-                      _buildScheduleSection(),
-                      const SizedBox(height: 25),
-                      _buildQuickActionsGrid(),
-                      const SizedBox(height: 25),
-                      _buildLatestNotesSection(screenWidth),
-                      const SizedBox(height: 20),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: pages,
       ),
       bottomNavigationBar: CustomBottomNavBar(
         currentIndex: _currentIndex,
         onTap: _onTabTapped,
       ),
+    );
+  }
+
+  // Nội dung chính của tab Trang chủ
+  Widget _buildHomeContent() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    return SafeArea(
+      child: RefreshIndicator(
+        onRefresh: _loadData,
+        color: AppColors.primary,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Stack(
+            children: [
+              Positioned(
+                right: -screenWidth * 0.2,
+                top: -screenWidth * 0.2,
+                child: Container(
+                  width: screenWidth * 0.5,
+                  height: screenWidth * 0.5,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 25),
+                    _buildMyPetsSection(screenWidth),
+                    const SizedBox(height: 25),
+                    _buildScheduleSection(),
+                    const SizedBox(height: 25),
+                    _buildQuickActionsGrid(),
+                    const SizedBox(height: 25),
+                    _buildLatestNotesSection(screenWidth),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Logic hiển thị tab Y tế
+  Widget _buildMedicalTab() {
+    if (_pets.isEmpty) {
+      return const Center(child: Text('Vui lòng thêm thú cưng để xem sổ y bạ'));
+    }
+    return MedicalHistoryScreen(
+      petId: _pets[0]['id'],
+      petName: _pets[0]['name'],
     );
   }
 
@@ -215,7 +245,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             clipBehavior: Clip.none,
-            // Nếu list trống, chỉ hiện nút Add. Nếu có list, hiện list + nút Add ở cuối.
             itemCount: _pets.length + 1,
             itemBuilder: (context, index) {
               if (index < _pets.length) {
@@ -227,7 +256,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     name: pet['name'] ?? 'Pet',
                     breed: pet['type'] ?? 'Unknown',
                     age: '${pet['age'] ?? '0'} tuổi',
-                    imageUrl: pet['avatarUrl'] ?? '', // FIX: Dùng avatarUrl từ Database
+                    imageUrl: pet['avatarUrl'] ?? '', 
                     isGradient: index % 2 == 0,
                   ),
                 );
@@ -295,7 +324,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildAddPetCard(double width) {
     return GestureDetector(
       onTap: () async {
-        // Sau khi quay lại từ trang Setup, tải lại data
         await Navigator.push(context, MaterialPageRoute(builder: (context) => const SetupProfileScreen()));
         _loadData(); 
       },
@@ -322,7 +350,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ... (Giữ nguyên các hàm UI khác: _buildScheduleSection, _buildQuickActionsGrid, v.v.)
   Widget _buildScheduleSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,42 +413,85 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _buildQuickActionButton(icon: Icons.calendar_month, label: 'Lịch', bgColor: const Color(0xFFFFF1E6), iconColor: const Color(0xFFF4A261)),
-          _buildQuickActionButton(icon: Icons.medical_services_outlined, label: 'Y tế', bgColor: AppColors.primary, iconColor: Colors.white),
-          _buildQuickActionButton(icon: Icons.shopping_bag_outlined, label: 'Shop', bgColor: const Color(0xFF4CAF82), iconColor: Colors.white),
-          _buildQuickActionButton(icon: Icons.people_alt_outlined, label: 'Cộng đồng', bgColor: const Color(0xFF5B9BD5), iconColor: Colors.white, badgeCount: 3),
+          _buildQuickActionButton(
+            icon: Icons.calendar_month, 
+            label: 'Lịch', 
+            bgColor: const Color(0xFFFFF1E6), 
+            iconColor: const Color(0xFFF4A261),
+            onTap: () {
+              setState(() => _currentIndex = 2); // Chuyển sang Tab Lịch
+            },
+          ),
+          _buildQuickActionButton(
+            icon: Icons.medical_services_outlined, 
+            label: 'Y tế', 
+            bgColor: AppColors.primary, 
+            iconColor: Colors.white,
+            onTap: () {
+              setState(() => _currentIndex = 3); // Chuyển sang Tab Khám bệnh
+            },
+          ),
+          _buildQuickActionButton(
+            icon: Icons.shopping_bag_outlined, 
+            label: 'Shop', 
+            bgColor: const Color(0xFF4CAF82), 
+            iconColor: Colors.white,
+            onTap: () {
+              setState(() => _currentIndex = 1);
+            },
+          ),
+          _buildQuickActionButton(
+            icon: Icons.people_alt_outlined, 
+            label: 'Cộng đồng', 
+            bgColor: const Color(0xFF5B9BD5), 
+            iconColor: Colors.white, 
+            badgeCount: 3,
+            onTap: () {
+              setState(() => _currentIndex = 4);
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildQuickActionButton({required IconData icon, required String label, required Color bgColor, required Color iconColor, int badgeCount = 0}) {
+  Widget _buildQuickActionButton({
+    required IconData icon, 
+    required String label, 
+    required Color bgColor, 
+    required Color iconColor, 
+    int badgeCount = 0,
+    VoidCallback? onTap,
+  }) {
     return Expanded(
-      child: Column(
-        children: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(16)),
-                child: Icon(icon, color: iconColor, size: 24),
-              ),
-              if (badgeCount > 0)
-                Positioned(
-                  top: -4,
-                  right: -4,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(color: Color(0xFFEF4444), shape: BoxShape.circle),
-                    child: Text('$badgeCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ),
-                )
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF374151), fontWeight: FontWeight.w500))
-        ],
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(16)),
+                  child: Icon(icon, color: iconColor, size: 24),
+                ),
+                if (badgeCount > 0)
+                  Positioned(
+                    top: -4,
+                    right: -4,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(color: Color(0xFFEF4444), shape: BoxShape.circle),
+                      child: Text('$badgeCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                  )
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF374151), fontWeight: FontWeight.w500))
+          ],
+        ),
       ),
     );
   }
