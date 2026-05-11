@@ -48,7 +48,7 @@ class MyApp extends StatelessWidget {
         ),
       ),
       // Bạn có thể đổi lại thành LoginScreen() nếu muốn bắt người dùng đăng nhập trước
-      home: const LoginScreen(),
+      home: const CalendarScreen(),
     );
   }
 }
