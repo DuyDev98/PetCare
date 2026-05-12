@@ -250,14 +250,32 @@ class _CalendarScreenState extends State<CalendarScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => AddTaskBottomSheet(
         selectedDate: _selectedDate,
-        onSave: (data) => _reminderService.createReminder(
-          title:    data.title,
-          dateTime: data.dateTime,
-          type:     data.type,
-          petId:    data.petId,
-          petName:  data.petName,
-          petBreed: data.petBreed,
-        ),
+        onSave: (data) async {
+          if (data.repeatType == RepeatType.none) {
+            // Không lặp — tạo 1 reminder đơn
+            await _reminderService.createReminder(
+              title:    data.title,
+              dateTime: data.dateTime,
+              type:     data.type,
+              petId:    data.petId,
+              petName:  data.petName,
+              petBreed: data.petBreed,
+            );
+          } else {
+            // Có lặp — tạo template + instances
+            await _reminderService.createRepeatingReminder(
+              title:         data.title,
+              startDateTime: data.dateTime,
+              type:          data.type,
+              petId:         data.petId,
+              petName:       data.petName,
+              petBreed:      data.petBreed,
+              repeatType:    data.repeatType,
+              repeatUntil:   data.repeatUntil!,
+              repeatDays:    data.repeatDays,
+            );
+          }
+        },
       ),
     );
   }
