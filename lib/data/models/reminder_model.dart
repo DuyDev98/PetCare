@@ -88,12 +88,11 @@ class ReminderModel {
   final DateTime timestamp;
   final ReminderType type;
   final String notes;
-  final String status;
-
-  // Pet info
+  final String status; // 'pending' | 'done'
   final String petId;
   final String petName;
   final String petBreed;
+  final String? imageUrl;
 
   // Repeat fields
   final RepeatType repeatType;
@@ -101,9 +100,9 @@ class ReminderModel {
   final DateTime? repeatUntil;  // ngày kết thúc
   final String? parentId;       // null = template, có = instance
 
+  bool get isCompleted => status == 'done';
   bool get isTemplate  => parentId == null && repeatType != RepeatType.none;
   bool get isInstance  => parentId != null;
-  bool get isCompleted => status == 'done';
 
   const ReminderModel({
     required this.id,
@@ -116,6 +115,7 @@ class ReminderModel {
     required this.petId,
     required this.petName,
     required this.petBreed,
+    this.imageUrl,
     this.repeatType  = RepeatType.none,
     this.repeatDays  = const [],
     this.repeatUntil,
@@ -132,6 +132,7 @@ class ReminderModel {
     'petId':       petId,
     'petName':     petName,
     'petBreed':    petBreed,
+    'imageUrl':    imageUrl,
     'repeatType':  repeatType.key,
     'repeatDays':  repeatDays,
     'repeatUntil': repeatUntil != null ? Timestamp.fromDate(repeatUntil!) : null,
@@ -150,6 +151,7 @@ class ReminderModel {
         petId:       map['petId']     ?? '',
         petName:     map['petName']   ?? '',
         petBreed:    map['petBreed']  ?? '',
+        imageUrl:    map['imageUrl'],
         repeatType:  RepeatTypeExtension.fromString(map['repeatType']),
         repeatDays:  List<int>.from(map['repeatDays'] ?? []),
         repeatUntil: (map['repeatUntil'] as Timestamp?)?.toDate(),
@@ -159,7 +161,7 @@ class ReminderModel {
   factory ReminderModel.fromFirestore(DocumentSnapshot doc) =>
       ReminderModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
 
-  ReminderModel copyWith({String? status, DateTime? timestamp}) => ReminderModel(
+  ReminderModel copyWith({String? status, DateTime? timestamp, String? imageUrl}) => ReminderModel(
     id:          id,
     userId:      userId,
     title:       title,
@@ -170,6 +172,7 @@ class ReminderModel {
     petId:       petId,
     petName:     petName,
     petBreed:    petBreed,
+    imageUrl:    imageUrl ?? this.imageUrl,
     repeatType:  repeatType,
     repeatDays:  repeatDays,
     repeatUntil: repeatUntil,

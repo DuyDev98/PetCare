@@ -1,9 +1,11 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:pet_care/features/auth/screens/login_screen.dart';
 import 'package:pet_care/features/home/screens/calendar_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pet_care/data/services/pet_service.dart';
 import 'package:pet_care/features/home/screens/home_screen.dart';
 // import 'package:pet_care/core/utils/backend_test.dart';
 import 'package:pet_care/features/home/screens/reminder_tab.dart';
@@ -15,19 +17,15 @@ import 'package:pet_care/features/home/screens/profile_screen.dart';
 import 'package:pet_care/features/home/screens/pet_details_screen.dart';
 import 'package:pet_care/features/home/screens/add_reminder_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:pet_care/features/home/screens/reminders_screen.dart';
 import 'package:pet_care/features/booking/screens/vet_clinic_screen.dart';
 import 'package:pet_care/features/auth/screens/login_screen.dart';
+import 'package:pet_care/features/home/screens/home_screen.dart';
+import 'package:pet_care/features/home/screens/setup_profile_screen.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Load biến môi trường từ file .env
   await dotenv.load(fileName: ".env");
-  
   await Firebase.initializeApp();
-
-  // BackendTest.runAllTests();
-
   runApp(const MyApp());
 }
 
@@ -42,13 +40,47 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.orange),
         useMaterial3: true,
-        // Cấu hình Google Fonts cho toàn bộ ứng dụng
-        textTheme: GoogleFonts.interTextTheme(
-          Theme.of(context).textTheme,
-        ),
+        textTheme: GoogleFonts.interTextTheme(Theme.of(context).textTheme),
       ),
-      // Bạn có thể đổi lại thành LoginScreen() nếu muốn bắt người dùng đăng nhập trước
-      home: const CalendarScreen(),
+      home: const AuthWrapper(),
+    );
+  }
+}
+
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+
+        // 1. Nếu chưa đăng nhập -> Màn hình Login
+        if (!snapshot.hasData) {
+          return const LoginScreen();
+        }
+
+        // 2. Nếu đã đăng nhập -> Kiểm tra xem đã tạo thú cưng chưa (Bỏ qua chọn vai trò)
+        return FutureBuilder<bool>(
+          future: PetService().checkUserProfileExists(),
+          builder: (context, petSnapshot) {
+            if (petSnapshot.connectionState == ConnectionState.waiting) {
+              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+            }
+
+            if (petSnapshot.data == true) {
+              return const HomeScreen();
+            } else {
+              // Nếu chưa có pet -> Vào thẳng trang tạo hồ sơ
+              return const CalendarScreen();
+            }
+          },
+        );
+      },
     );
   }
 }

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../logic/auth_controller.dart';
 import 'package:pet_care/data/services/pet_service.dart';
-import 'package:pet_care/features/auth/screens/role_selection_screen.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/custom_text_field.dart';
 import '../../../core/widgets/custom_button.dart';
@@ -77,14 +76,13 @@ class _RegisterState extends State<Register> {
       return;
     }
 
-    final error = await _authController.signUp(email, password, username);
+    // Luôn đăng ký với vai trò 'user'
+    final error = await _authController.signUp(email, password, username, role: 'user');
 
     if (error == null) {
       if (_imageFile != null) {
-        // Tải ảnh lên Cloudinary
         String? imageUrl = await _petService.uploadToCloudinary(_imageFile!);
         if (imageUrl != null) {
-          // Lưu thông tin kèm ảnh đại diện vào Firestore (FIX: Không dùng tham số vị trí)
           await _petService.saveUserInfo(
             displayName: username,
             photoURL: imageUrl,
@@ -94,7 +92,7 @@ class _RegisterState extends State<Register> {
       
       if (mounted) {
         UIHelpers.showSnackBar(context, "Đăng ký thành công!");
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const RoleSelectionScreen()));
+        // AuthWrapper sẽ tự động chuyển hướng đến SetupProfileScreen vì chưa có pet
       }
     } else {
       if (mounted) UIHelpers.showSnackBar(context, error, isError: true);

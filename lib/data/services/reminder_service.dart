@@ -4,8 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/reminder_model.dart';
 
 class ReminderService {
-  final CollectionReference _db =
-  FirebaseFirestore.instance.collection('reminders');
+  final CollectionReference _db = FirebaseFirestore.instance.collection('reminders');
 
   String get _uid => FirebaseAuth.instance.currentUser?.uid ?? '';
 
@@ -17,8 +16,9 @@ class ReminderService {
     required String petId,
     required String petName,
     required String petBreed,
-    String notes  = '',
+    String notes = '',
     String status = 'pending',
+    String? imageUrl,
   }) async {
     await _db.add({
       'userId':      _uid,
@@ -30,6 +30,7 @@ class ReminderService {
       'petId':       petId,
       'petName':     petName,
       'petBreed':    petBreed,
+      'imageUrl':    imageUrl,
       'repeatType':  'none',
       'repeatDays':  [],
       'repeatUntil': null,
@@ -38,7 +39,6 @@ class ReminderService {
   }
 
   // ── Tạo nhắc nhở lặp lại ─────────────────────────────────
-  /// Tạo 1 template + tất cả instances từ [startDate] đến [repeatUntil]
   Future<void> createRepeatingReminder({
     required String title,
     required DateTime startDateTime,
@@ -48,8 +48,9 @@ class ReminderService {
     required String petBreed,
     required RepeatType repeatType,
     required DateTime repeatUntil,
-    List<int> repeatDays = const [], // dùng khi repeatType == custom
+    List<int> repeatDays = const [],
     String notes = '',
+    String? imageUrl,
   }) async {
     // 1. Tạo template document
     final templateRef = await _db.add({
@@ -62,10 +63,11 @@ class ReminderService {
       'petId':       petId,
       'petName':     petName,
       'petBreed':    petBreed,
+      'imageUrl':    imageUrl,
       'repeatType':  repeatType.key,
       'repeatDays':  repeatDays,
       'repeatUntil': Timestamp.fromDate(repeatUntil),
-      'parentId':    null, // đây là template
+      'parentId':    null,
     });
 
     // 2. Tính tất cả ngày cần tạo instance
@@ -90,16 +92,16 @@ class ReminderService {
         'petId':       petId,
         'petName':     petName,
         'petBreed':    petBreed,
+        'imageUrl':    imageUrl,
         'repeatType':  repeatType.key,
         'repeatDays':  repeatDays,
         'repeatUntil': Timestamp.fromDate(repeatUntil),
-        'parentId':    templateRef.id, // trỏ về template
+        'parentId':    templateRef.id,
       });
     }
     await batch.commit();
   }
 
-  /// Tính danh sách DateTime dựa trên repeatType
   List<DateTime> _generateDates({
     required DateTime start,
     required DateTime until,
@@ -112,7 +114,6 @@ class ReminderService {
 
     switch (repeatType) {
       case RepeatType.daily:
-      // Mỗi ngày từ start đến until
         var current = start;
         while (!current.isAfter(until)) {
           dates.add(DateTime(current.year, current.month, current.day, hour, min));
@@ -121,7 +122,6 @@ class ReminderService {
         break;
 
       case RepeatType.weekly:
-      // Cùng thứ trong tuần với start, mỗi tuần 1 lần
         var current = start;
         while (!current.isAfter(until)) {
           dates.add(DateTime(current.year, current.month, current.day, hour, min));
@@ -130,7 +130,6 @@ class ReminderService {
         break;
 
       case RepeatType.custom:
-      // Các ngày trong tuần được chọn (repeatDays)
         var current = start;
         while (!current.isAfter(until)) {
           if (repeatDays.contains(current.weekday)) {
@@ -143,24 +142,18 @@ class ReminderService {
       default:
         break;
     }
-
     return dates;
   }
 
   // ── Lấy danh sách theo ngày ───────────────────────────────
-  /// Chỉ lấy instances (parentId != null) và reminder đơn (parentId == null, repeatType == none)
-  /// Không lấy template thuần
-  Stream<List<ReminderModel>> getRemindersByDate(
-      DateTime date, {
-        String? petId,
-      }) {
+  Stream<List<ReminderModel>> getRemindersByDate(DateTime date, {String? petId}) {
     final start = DateTime(date.year, date.month, date.day, 0, 0, 0);
     final end   = DateTime(date.year, date.month, date.day, 23, 59, 59);
 
     Query query = _db
         .where('userId',    isEqualTo: _uid)
         .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
-        .where('timestamp', isLessThanOrEqualTo:    Timestamp.fromDate(end))
+        .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(end))
         .orderBy('timestamp');
 
     if (petId != null && petId.isNotEmpty) {
@@ -169,7 +162,6 @@ class ReminderService {
 
     return query.snapshots().map((snap) => snap.docs
         .map((d) => ReminderModel.fromMap(d.data() as Map<String, dynamic>, d.id))
-    // Lọc bỏ template (có repeat nhưng chưa có parentId)
         .where((r) => !r.isTemplate)
         .toList());
   }
@@ -200,7 +192,6 @@ class ReminderService {
     });
   }
 
-  // ── Xoá chỉ ngày đang chọn ───────────────────────────────
   Future<void> deleteReminder(String docId) async {
     await _db.doc(docId).delete();
   }

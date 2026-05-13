@@ -1,8 +1,11 @@
 // lib/core/widgets/add_task_bottom_sheet.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:pet_care/data/models/pet_model.dart';
 import 'package:pet_care/data/models/reminder_model.dart';
-import '../../data/services/firebase_service.dart';
+import 'package:pet_care/data/services/firebase_service.dart';
+import 'package:pet_care/data/services/pet_service.dart';
 
 class TaskFormData {
   final String title;
@@ -11,6 +14,7 @@ class TaskFormData {
   final String petName;
   final String petBreed;
   final DateTime dateTime;
+  final String? imageUrl;
   final RepeatType repeatType;
   final List<int> repeatDays;
   final DateTime? repeatUntil;
@@ -22,8 +26,9 @@ class TaskFormData {
     required this.petName,
     required this.petBreed,
     required this.dateTime,
-    this.repeatType  = RepeatType.none,
-    this.repeatDays  = const [],
+    this.imageUrl,
+    this.repeatType = RepeatType.none,
+    this.repeatDays = const [],
     this.repeatUntil,
   });
 }
@@ -44,17 +49,20 @@ class AddTaskBottomSheet extends StatefulWidget {
 
 class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
   final _titleController = TextEditingController();
-  final _service         = FirebaseService();
+  final _firebaseService = FirebaseService();
+  final _petService      = PetService();
+  final _picker          = ImagePicker();
 
-  ReminderType _selectedType     = ReminderType.feed;
+  ReminderType _selectedType = ReminderType.feed;
   String?      _selectedPetId;
   String       _selectedPetName  = '';
   String       _selectedPetBreed = '';
   TimeOfDay    _selectedTime     = TimeOfDay.now();
+  File?        _imageFile;
 
   // Repeat state
   RepeatType   _repeatType       = RepeatType.none;
-  List<int>    _repeatDays       = [];   // custom weekdays
+  List<int>    _repeatDays       = [];   // custom weekdays [1..7]
   DateTime?    _repeatUntil;
 
   bool         _isSaving         = false;
@@ -70,22 +78,64 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
     super.dispose();
   }
 
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(source: source, imageQuality: 70);
+      if (pickedFile != null) {
+        setState(() => _imageFile = File(pickedFile.path));
+      }
+    } catch (e) {
+      debugPrint("Lỗi chọn ảnh: $e");
+    }
+  }
+
+  void _showImageSourceDialog() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: _primary),
+              title: const Text('Chụp ảnh mới'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: _primary),
+              title: const Text('Chọn từ thư viện'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _save() async {
-    if (_titleController.text.trim().isEmpty) return;
+    final title = _titleController.text.trim();
+    if (title.isEmpty) return;
+    
     if (_selectedPetId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Vui lòng chọn thú cưng')),
       );
       return;
     }
-    // Nếu chọn lặp nhưng chưa chọn ngày kết thúc
+
     if (_repeatType != RepeatType.none && _repeatUntil == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Vui lòng chọn ngày kết thúc lặp lại')),
       );
       return;
     }
-    // Nếu custom nhưng chưa chọn ngày nào
+
     if (_repeatType == RepeatType.custom && _repeatDays.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Vui lòng chọn ít nhất 1 ngày trong tuần')),
@@ -94,7 +144,13 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
     }
 
     setState(() => _isSaving = true);
+
     try {
+      String? imageUrl;
+      if (_imageFile != null) {
+        imageUrl = await _petService.uploadToCloudinary(_imageFile!);
+      }
+
       final taskDate = DateTime(
         widget.selectedDate.year,
         widget.selectedDate.month,
@@ -102,17 +158,20 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
         _selectedTime.hour,
         _selectedTime.minute,
       );
+
       await widget.onSave(TaskFormData(
-        title:       _titleController.text.trim(),
+        title:       title,
         type:        _selectedType,
         petId:       _selectedPetId!,
         petName:     _selectedPetName,
         petBreed:    _selectedPetBreed,
         dateTime:    taskDate,
+        imageUrl:    imageUrl,
         repeatType:  _repeatType,
         repeatDays:  _repeatDays,
         repeatUntil: _repeatUntil,
       ));
+
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
@@ -150,9 +209,41 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text('Thêm nhiệm vụ mới',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _textPrimary)),
+            const Text(
+              'Thêm nhiệm vụ mới',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _textPrimary),
+            ),
             const SizedBox(height: 20),
+
+            // ── Ảnh kỷ niệm ─────────────────────────────
+            _buildLabel('Hình ảnh kỷ niệm'),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: _showImageSourceDialog,
+              child: Container(
+                width: double.infinity,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F8FF),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: _primary.withOpacity(0.1)),
+                ),
+                child: _imageFile != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: Image.file(_imageFile!, fit: BoxFit.cover),
+                      )
+                    : const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add_a_photo_rounded, color: _primary, size: 28),
+                          SizedBox(height: 4),
+                          Text('Chụp ảnh kỷ niệm', style: TextStyle(fontSize: 12, color: _textSecondary)),
+                        ],
+                      ),
+              ),
+            ),
+            const SizedBox(height: 16),
 
             // ── Tiêu đề ──────────────────────────────────
             _buildLabel('Tiêu đề'),
@@ -161,7 +252,7 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
               controller: _titleController,
               decoration: InputDecoration(
                 hintText: 'Ví dụ: Tắm cho Bella...',
-                hintStyle: TextStyle(color: _textSecondary.withValues(alpha: 0.7)),
+                hintStyle: TextStyle(color: _textSecondary.withOpacity(0.5)),
                 filled: true,
                 fillColor: const Color(0xFFF5F8FF),
                 border: OutlineInputBorder(
@@ -192,12 +283,14 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
                           color: isSelected ? _primary : const Color(0xFFF5F8FF),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Text(type.label,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: isSelected ? Colors.white : _textSecondary,
-                            )),
+                        child: Text(
+                          type.label,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: isSelected ? Colors.white : _textSecondary,
+                          ),
+                        ),
                       ),
                     ),
                   );
@@ -210,7 +303,7 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
             _buildLabel('Thú cưng'),
             const SizedBox(height: 8),
             StreamBuilder<List<PetModel>>(
-              stream: _service.petsStream(),
+              stream: _firebaseService.petsStream(),
               builder: (context, snapshot) {
                 final pets = snapshot.data ?? [];
                 return DropdownButtonFormField<String>(
@@ -230,6 +323,7 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
                     child: Text('${p.name} · ${p.breed}'),
                   )).toList(),
                   onChanged: (id) {
+                    if (id == null) return;
                     final pet = pets.firstWhere((p) => p.id == id);
                     setState(() {
                       _selectedPetId    = id;
@@ -300,10 +394,12 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
                 child: _isSaving
-                    ? const SizedBox(width: 22, height: 22,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Lưu nhiệm vụ',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                    ? const SizedBox(
+                        width: 22, 
+                        height: 22, 
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : const Text('Lưu nhiệm vụ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
               ),
             ),
           ],
@@ -312,7 +408,6 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
     );
   }
 
-  // ── Repeat type chips ─────────────────────────────────────
   Widget _buildRepeatTypeSelector() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -333,9 +428,6 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
                 decoration: BoxDecoration(
                   color: isSelected ? _accent : const Color(0xFFF5F8FF),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isSelected ? _accent : Colors.transparent,
-                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -344,12 +436,14 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
                       const Icon(Icons.repeat_rounded, size: 14, color: Colors.white),
                       const SizedBox(width: 4),
                     ],
-                    Text(type.label,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isSelected ? Colors.white : _textSecondary,
-                        )),
+                    Text(
+                      type.label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isSelected ? Colors.white : _textSecondary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -360,7 +454,6 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
     );
   }
 
-  // ── Weekday picker (custom) ───────────────────────────────
   Widget _buildWeekdayPicker() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -403,7 +496,6 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
     );
   }
 
-  // ── Repeat until date picker ──────────────────────────────
   Widget _buildRepeatUntilPicker() {
     return GestureDetector(
       onTap: () async {
@@ -421,7 +513,7 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
           color: const Color(0xFFF5F8FF),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: _repeatUntil == null ? Colors.orange.withValues(alpha: 0.5) : Colors.transparent,
+            color: _repeatUntil == null ? Colors.orange.withOpacity(0.5) : Colors.transparent,
           ),
         ),
         child: Row(
@@ -446,12 +538,14 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
   }
 
   Widget _buildLabel(String text) {
-    return Text(text,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: _textSecondary,
-          letterSpacing: 0.3,
-        ));
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: _textSecondary,
+        letterSpacing: 0.3,
+      ),
+    );
   }
 }

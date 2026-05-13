@@ -1,10 +1,13 @@
 // lib/core/widgets/task_card.dart
 import 'package:flutter/material.dart';
 import 'package:pet_care/data/models/reminder_model.dart';
+import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../constants/app_colors.dart';
 
 class TaskCard extends StatelessWidget {
   final ReminderModel task;
-  final void Function(bool) onToggle;
+  final Function(bool) onToggle;
 
   const TaskCard({
     super.key,
@@ -12,27 +15,25 @@ class TaskCard extends StatelessWidget {
     required this.onToggle,
   });
 
-  static const _primary       = Color(0xFF5BB8F5);
-  static const _accent        = Color(0xFFFF8C42);
-  static const _textPrimary   = Color(0xFF1E2D4E);
-  static const _textSecondary = Color(0xFF8FA3BF);
+  static const _textPrimary = AppColors.textBlack;
+  static const _textSecondary = AppColors.textGrey;
 
   _TaskVisual get _visual {
     switch (task.type) {
       case ReminderType.bath:
-        return const _TaskVisual(
+        return _TaskVisual(
           icon: Icons.water_drop_rounded,
-          bgColor: Color(0xFFE3F4FF),
-          iconColor: Color(0xFF5BB8F5),
-          tagColor: Color(0xFF5BB8F5),
-          tagBg: Color(0xFFE3F4FF),
+          bgColor: AppColors.primary.withOpacity(0.1),
+          iconColor: AppColors.primary,
+          tagColor: AppColors.primary,
+          tagBg: AppColors.primary.withOpacity(0.1),
         );
       case ReminderType.vaccine:
         return const _TaskVisual(
           icon: Icons.vaccines_rounded,
           bgColor: Color(0xFFFFF3E0),
-          iconColor: Color(0xFFFF8C42),
-          tagColor: Color(0xFFFF8C42),
+          iconColor: AppColors.secondary,
+          tagColor: AppColors.secondary,
           tagBg: Color(0xFFFFF3E0),
         );
       case ReminderType.feed:
@@ -70,138 +71,156 @@ class TaskCard extends StatelessWidget {
     }
   }
 
-  // Format DateTime → "HH:mm"
-  String get _timeStr {
-    final t = task.timestamp;
-    return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-  }
-
   @override
   Widget build(BuildContext context) {
-    final vis         = _visual;
-    final isCompleted = task.isCompleted;
+    final vis = _visual;
+    final isDone = task.isCompleted;
+    final timeStr = DateFormat('HH:mm').format(task.timestamp);
 
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 200),
-      opacity: isCompleted ? 0.7 : 1.0,
+      opacity: isDone ? 0.7 : 1.0,
       child: Container(
-        padding: const EdgeInsets.all(14),
+        margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: Colors.black.withOpacity(0.04),
               blurRadius: 10,
-              offset: const Offset(0, 2),
+              offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: Row(
+        child: Column(
           children: [
-            // Icon loại nhiệm vụ
-            Container(
-              width: 44, height: 44,
-              decoration: BoxDecoration(
-                color: vis.bgColor,
-                borderRadius: BorderRadius.circular(14),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              leading: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: vis.bgColor,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(vis.icon, color: vis.iconColor, size: 22),
               ),
-              child: Icon(vis.icon, color: vis.iconColor, size: 22),
+              title: Text(
+                task.title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  decoration: isDone ? TextDecoration.lineThrough : null,
+                  color: isDone ? _textSecondary : _textPrimary,
+                ),
+              ),
+              subtitle: Text(
+                '$timeStr • ${task.petName}',
+                style: const TextStyle(fontSize: 12, color: _textSecondary),
+              ),
+              trailing: GestureDetector(
+                onTap: () => onToggle(!isDone),
+                child: Icon(
+                  isDone ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                  color: isDone ? Colors.green : Colors.grey[300],
+                  size: 28,
+                ),
+              ),
             ),
-            const SizedBox(width: 12),
-
-            // Thông tin
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: vis.tagBg,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          task.type.label,
+            if (task.imageUrl != null && task.imageUrl!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Divider(height: 1),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Icon(Icons.auto_awesome, size: 14, color: Colors.orangeAccent),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'Kỷ niệm ghi lại',
                           style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: vis.tagColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orangeAccent,
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: vis.tagBg,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            task.type.label,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: vis.tagColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: () => _showFullImage(context, task.imageUrl!),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(15),
+                        child: CachedNetworkImage(
+                          imageUrl: task.imageUrl!,
+                          height: 160,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(
+                            height: 160,
+                            color: Colors.grey[50],
+                            child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            height: 160,
+                            color: Colors.grey[50],
+                            child: const Icon(Icons.broken_image, color: Colors.grey),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _timeStr,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: _textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    task.title,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: _textPrimary,
-                      decoration: isCompleted
-                          ? TextDecoration.lineThrough
-                          : TextDecoration.none,
-                      decorationColor: _textSecondary,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${task.petName} · ${task.petBreed}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: _textSecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showFullImage(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              child: CachedNetworkImage(
+                imageUrl: url,
+                fit: BoxFit.contain,
+                placeholder: (context, url) => const CircularProgressIndicator(),
               ),
             ),
-            const SizedBox(width: 8),
-
-            // Actions
-            Column(
-              children: [
-                Icon(
-                  Icons.notifications_rounded,
-                  size: 18,
-                  color: isCompleted
-                      ? _textSecondary.withValues(alpha: 0.4)
-                      : _accent,
-                ),
-                const SizedBox(height: 10),
-                GestureDetector(
-                  onTap: () => onToggle(!task.isCompleted),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 24, height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isCompleted ? _primary : Colors.transparent,
-                      border: Border.all(
-                        color: isCompleted ? _primary : const Color(0xFFD0DEEE),
-                        width: 2,
-                      ),
-                    ),
-                    child: isCompleted
-                        ? const Icon(Icons.check_rounded, color: Colors.white, size: 14)
-                        : null,
-                  ),
-                ),
-              ],
+            Positioned(
+              top: 40,
+              right: 20,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.pop(context),
+              ),
             ),
           ],
         ),

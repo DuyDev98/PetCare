@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../constants/app_colors.dart';
 
 class CalendarWidget extends StatefulWidget {
   final DateTime selectedDate;
@@ -17,8 +18,8 @@ class CalendarWidget extends StatefulWidget {
 class _CalendarWidgetState extends State<CalendarWidget> {
   late DateTime _displayMonth;
 
-  static const _primary = Color(0xFF5BB8F5);
-  static const _accent = Color(0xFFFF8C42);
+  static const _primary = AppColors.primary;
+  static const _accent = AppColors.secondary;
   static const _textPrimary = Color(0xFF1E2D4E);
   static const _textSecondary = Color(0xFF8FA3BF);
 
@@ -59,7 +60,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF5BB8F5).withOpacity(0.1),
+            color: _primary.withOpacity(0.1),
             blurRadius: 20,
             offset: const Offset(0, 4),
           ),
@@ -86,7 +87,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: const Color(0xFFEEF5FF),
+              color: _primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
@@ -127,7 +128,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: const Color(0xFFEEF5FF),
+              color: _primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(

@@ -1,7 +1,8 @@
-// lib/features/calendar/calendar_screen.dart
 import 'package:flutter/material.dart';
 import 'package:pet_care/data/models/pet_model.dart';
 import 'package:pet_care/data/models/reminder_model.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:pet_care/core/constants/app_colors.dart';
 import '../../../data/services/firebase_service.dart';
 import '../../../data/services/reminder_service.dart';
 import '../../../core/widgets/pet_avatar_selector.dart';
@@ -22,13 +23,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   DateTime _selectedDate  = DateTime.now();
   String?  _selectedPetId;
-  int      _currentNavIndex = 2;
 
-  static const Color _primary       = Color(0xFF5BB8F5);
-  static const Color _accent        = Color(0xFFFF8C42);
-  static const Color _bg            = Color(0xFFF0F6FF);
-  static const Color _textPrimary   = Color(0xFF1E2D4E);
-  static const Color _textSecondary = Color(0xFF8FA3BF);
+  // Colors - Using unified AppColors
+  static const Color _primary       = AppColors.primary;
+  static const Color _accent        = AppColors.secondary;
+  static const Color _bg            = Color(0xFFF8F9FA);
+  static const Color _textPrimary   = AppColors.textBlack;
+  static const Color _textSecondary = AppColors.textGrey;
 
   @override
   Widget build(BuildContext context) {
@@ -39,34 +40,41 @@ class _CalendarScreenState extends State<CalendarScreen> {
           children: [
             _buildHeader(),
             Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 12),
-                    _buildPetSelector(),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: CalendarWidget(
-                        selectedDate: _selectedDate,
-                        onDateSelected: (date) =>
-                            setState(() => _selectedDate = date),
-                      ),
+              child: StreamBuilder<List<ReminderModel>>(
+                stream: _reminderService.getRemindersByDate(_selectedDate, petId: _selectedPetId),
+                builder: (context, snapshot) {
+                  final reminders = snapshot.data ?? [];
+                  
+                  return SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 12),
+                        _buildPetSelector(),
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: CalendarWidget(
+                            selectedDate: _selectedDate,
+                            onDateSelected: (date) =>
+                                setState(() => _selectedDate = date),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        _buildMomentsSection(reminders),
+                        _buildTaskSection(reminders, snapshot.connectionState),
+                        const SizedBox(height: 100),
+                      ],
                     ),
-                    const SizedBox(height: 20),
-                    _buildTaskSection(),
-                    const SizedBox(height: 100),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
           ],
         ),
       ),
       floatingActionButton: _buildFAB(),
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
@@ -74,23 +82,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 12, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      width: double.infinity,
       decoration: const BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          )
+        ],
       ),
       child: Row(
         children: [
-          IconButton(
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-            color: _textPrimary,
-          ),
           const Expanded(
             child: Text(
               'Lịch chăm sóc & Nhắc nhở',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: _textPrimary),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _textPrimary),
             ),
           ),
           Stack(
@@ -98,7 +107,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             children: [
               Container(
                 width: 40, height: 40,
-                decoration: BoxDecoration(color: const Color(0xFFEEF5FF), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(color: _primary.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
                 child: const Icon(Icons.notifications_none_rounded, color: _primary, size: 22),
               ),
               Positioned(
@@ -106,7 +115,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 child: Container(
                   width: 18, height: 18,
                   decoration: BoxDecoration(
-                    color: _accent,
+                    color: Colors.redAccent,
                     borderRadius: BorderRadius.circular(9),
                     border: Border.all(color: Colors.white, width: 1.5),
                   ),
@@ -138,73 +147,125 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
+  // ─── Moments Section ───────────────────────────────────────────────────────
+
+  Widget _buildMomentsSection(List<ReminderModel> reminders) {
+    final remindersWithImages = reminders
+        .where((r) => r.imageUrl != null && r.imageUrl!.isNotEmpty)
+        .toList();
+
+    if (remindersWithImages.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              const Icon(Icons.auto_awesome, color: _primary, size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Khoảnh khắc kỷ niệm',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _textPrimary),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 140,
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            scrollDirection: Axis.horizontal,
+            itemCount: remindersWithImages.length,
+            itemBuilder: (context, index) {
+              final reminder = remindersWithImages[index];
+              return Container(
+                margin: const EdgeInsets.only(right: 12),
+                width: 110,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: CachedNetworkImage(
+                    imageUrl: reminder.imageUrl!,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                    errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
   // ─── Task Section ──────────────────────────────────────────────────────────
 
-  Widget _buildTaskSection() {
-    return StreamBuilder<List<ReminderModel>>(
-      // ✅ Dùng ReminderService thay FirebaseService
-      stream: _reminderService.getRemindersByDate(
-        _selectedDate,
-        petId: _selectedPetId,
-      ),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(40),
-              child: CircularProgressIndicator(color: _primary),
-            ),
-          );
-        }
+  Widget _buildTaskSection(List<ReminderModel> reminders, ConnectionState connectionState) {
+    if (connectionState == ConnectionState.waiting) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40),
+          child: CircularProgressIndicator(color: _primary),
+        ),
+      );
+    }
 
-        final reminders = snapshot.data ?? [];
-        final completed = reminders.where((r) => r.isCompleted).length;
+    final completed = reminders.where((r) => r.isCompleted).length;
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Nhiệm vụ hôm nay',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: _textPrimary),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                    decoration: BoxDecoration(color: const Color(0xFFEEF5FF), borderRadius: BorderRadius.circular(20)),
-                    child: Text(
-                      '$completed/${reminders.length} hoàn thành',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _primary),
-                    ),
-                  ),
-                ],
+              const Text(
+                'Nhiệm vụ trong ngày',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _textPrimary),
               ),
-              const SizedBox(height: 14),
-
-              if (reminders.isEmpty)
-                _buildEmptyState()
-              else
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: reminders.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, i) {
-                    final reminder = reminders[i];
-                    return TaskCard(
-                      task: reminder,
-                      onToggle: (value) =>
-                          _reminderService.toggleReminder(reminder.id, value),
-                    );
-                  },
+              if (reminders.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: _primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$completed/${reminders.length} hoàn thành',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _primary),
+                  ),
                 ),
             ],
           ),
-        );
-      },
+          const SizedBox(height: 14),
+          if (reminders.isEmpty)
+            _buildEmptyState()
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: reminders.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, i) {
+                final reminder = reminders[i];
+                return TaskCard(
+                  task: reminder,
+                  onToggle: (value) => _reminderService.toggleReminder(reminder.id, value),
+                );
+              },
+            ),
+        ],
+      ),
     );
   }
 
@@ -216,15 +277,22 @@ class _CalendarScreenState extends State<CalendarScreen> {
           children: [
             Container(
               width: 80, height: 80,
-              decoration: BoxDecoration(color: const Color(0xFFEEF5FF), borderRadius: BorderRadius.circular(40)),
+              decoration: BoxDecoration(
+                color: _primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(40),
+              ),
               child: const Icon(Icons.event_available_rounded, size: 40, color: _primary),
             ),
             const SizedBox(height: 16),
-            const Text('Không có nhiệm vụ nào',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: _textPrimary)),
+            const Text(
+              'Không có nhiệm vụ nào',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _textPrimary),
+            ),
             const SizedBox(height: 8),
-            const Text('Nhấn + để thêm nhiệm vụ mới',
-                style: TextStyle(fontSize: 13, color: _textSecondary)),
+            const Text(
+              'Nhấn + để thêm nhiệm vụ mới',
+              style: TextStyle(fontSize: 13, color: _textSecondary),
+            ),
           ],
         ),
       ),
@@ -236,7 +304,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget _buildFAB() {
     return FloatingActionButton(
       onPressed: _showAddTaskSheet,
-      backgroundColor: _accent,
+      backgroundColor: _primary,
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
@@ -252,7 +320,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
         selectedDate: _selectedDate,
         onSave: (data) async {
           if (data.repeatType == RepeatType.none) {
-            // Không lặp — tạo 1 reminder đơn
             await _reminderService.createReminder(
               title:    data.title,
               dateTime: data.dateTime,
@@ -260,9 +327,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
               petId:    data.petId,
               petName:  data.petName,
               petBreed: data.petBreed,
+              imageUrl: data.imageUrl,
             );
           } else {
-            // Có lặp — tạo template + instances
             await _reminderService.createRepeatingReminder(
               title:         data.title,
               startDateTime: data.dateTime,
@@ -273,59 +340,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
               repeatType:    data.repeatType,
               repeatUntil:   data.repeatUntil!,
               repeatDays:    data.repeatDays,
+              imageUrl:      data.imageUrl,
             );
           }
         },
-      ),
-    );
-  }
-
-  // ─── Bottom Nav ────────────────────────────────────────────────────────────
-
-  Widget _buildBottomNav() {
-    const items = [
-      {'icon': Icons.home_rounded,             'label': 'Trang chủ'},
-      {'icon': Icons.medical_services_rounded,  'label': 'Dịch vụ'},
-      {'icon': Icons.calendar_month_rounded,    'label': 'Lịch'},
-      {'icon': Icons.local_hospital_rounded,    'label': 'Khám bệnh'},
-      {'icon': Icons.people_alt_rounded,        'label': 'Cộng đồng'},
-    ];
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        boxShadow: [BoxShadow(color: Color(0x14000000), blurRadius: 20, offset: Offset(0, -4))],
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 64,
-          child: Row(
-            children: List.generate(items.length, (i) {
-              final isActive = i == _currentNavIndex;
-              return Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => setState(() => _currentNavIndex = i),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(items[i]['icon'] as IconData,
-                          size: 24, color: isActive ? _primary : _textSecondary),
-                      const SizedBox(height: 4),
-                      Text(items[i]['label'] as String,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
-                            color: isActive ? _primary : _textSecondary,
-                          )),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ),
-        ),
       ),
     );
   }
