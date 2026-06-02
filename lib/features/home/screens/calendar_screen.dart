@@ -1,8 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:pet_care/data/models/pet_model.dart';
+import 'package:pet_care/data/models/pet_photo_model.dart';
 import 'package:pet_care/data/models/reminder_model.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:pet_care/core/constants/app_colors.dart';
+import 'package:pet_care/data/services/pet_photo_service.dart';
+import 'package:pet_care/data/services/pet_service.dart';
 import '../../../data/services/firebase_service.dart';
 import '../../../data/services/reminder_service.dart';
 import '../../../core/widgets/pet_avatar_selector.dart';
@@ -20,13 +25,17 @@ class CalendarScreen extends StatefulWidget {
 class _CalendarScreenState extends State<CalendarScreen> {
   final _petService      = FirebaseService();
   final _reminderService = ReminderService();
+  final _petPhotoService = PetPhotoService();
+  final _uploadService   = PetService();
+  final _picker          = ImagePicker();
 
   DateTime _selectedDate  = DateTime.now();
   String?  _selectedPetId;
+  String   _selectedPetName = '';
+  bool     _isSavingPhoto = false;
 
   // Colors - Using unified AppColors
   static const Color _primary       = AppColors.primary;
-  static const Color _accent        = AppColors.secondary;
   static const Color _bg            = Color(0xFFF8F9FA);
   static const Color _textPrimary   = AppColors.textBlack;
   static const Color _textSecondary = AppColors.textGrey;
@@ -62,7 +71,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        _buildMomentsSection(reminders),
+                        _buildPetPhotosSection(),
                         _buildTaskSection(reminders, snapshot.connectionState),
                         const SizedBox(height: 100),
                       ],
@@ -107,7 +116,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             children: [
               Container(
                 width: 40, height: 40,
-                decoration: BoxDecoration(color: _primary.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(color: _primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
                 child: const Icon(Icons.notifications_none_rounded, color: _primary, size: 22),
               ),
               Positioned(
@@ -141,70 +150,254 @@ class _CalendarScreenState extends State<CalendarScreen> {
         return PetAvatarSelector(
           pets: pets,
           selectedPetId: _selectedPetId,
-          onSelected: (id) => setState(() => _selectedPetId = id),
+          onSelected: (id) => setState(() {
+            _selectedPetId = id;
+            final selected = pets.where((pet) => pet.id == id);
+            _selectedPetName = selected.isEmpty ? '' : selected.first.name;
+          }),
         );
       },
     );
   }
 
-  // ─── Moments Section ───────────────────────────────────────────────────────
+  // ─── Pet Photos Section ────────────────────────────────────────────────────
 
-  Widget _buildMomentsSection(List<ReminderModel> reminders) {
-    final remindersWithImages = reminders
-        .where((r) => r.imageUrl != null && r.imageUrl!.isNotEmpty)
-        .toList();
+  Widget _buildPetPhotosSection() {
+    return StreamBuilder<List<PetPhotoModel>>(
+      stream: _petPhotoService.getPhotosByDate(_selectedDate, petId: _selectedPetId),
+      builder: (context, snapshot) {
+        final photos = snapshot.data ?? [];
 
-    if (remindersWithImages.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              const Icon(Icons.auto_awesome, color: _primary, size: 20),
-              const SizedBox(width: 8),
-              const Text(
-                'Khoảnh khắc kỷ niệm',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _textPrimary),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  const Icon(Icons.photo_camera_rounded, color: _primary, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Ảnh kỷ niệm',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _textPrimary),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Lưu ảnh kỷ niệm',
+                    onPressed: _isSavingPhoto ? null : _showPetPhotoSourceDialog,
+                    icon: _isSavingPhoto
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.add_a_photo_rounded, color: _primary),
+                  ),
+                ],
               ),
+            ),
+            const SizedBox(height: 12),
+            if (photos.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: GestureDetector(
+                  onTap: _isSavingPhoto ? null : _showPetPhotoSourceDialog,
+                  child: Container(
+                    width: double.infinity,
+                    height: 92,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: _primary.withValues(alpha: 0.14)),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Thêm ảnh kỷ niệm',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _textSecondary),
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                height: 140,
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: photos.length,
+                  itemBuilder: (context, index) => _buildPetPhotoItem(photos[index]),
+                ),
+              ),
+            const SizedBox(height: 24),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildPetPhotoItem(PetPhotoModel photo) {
+    return Container(
+      margin: const EdgeInsets.only(right: 12),
+      width: 110,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: CachedNetworkImage(
+          imageUrl: photo.imageUrl,
+          fit: BoxFit.cover,
+          placeholder: (context, url) =>
+              const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          errorWidget: (context, url, error) =>
+              const Icon(Icons.broken_image, color: Colors.grey),
+          imageBuilder: (context, imageProvider) => Stack(
+            fit: StackFit.expand,
+            children: [
+              Image(image: imageProvider, fit: BoxFit.cover),
+              if (photo.title.isNotEmpty)
+                Align(
+                  alignment: Alignment.bottomLeft,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    color: Colors.black.withValues(alpha: 0.45),
+                    child: Text(
+                      photo.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 140,
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            scrollDirection: Axis.horizontal,
-            itemCount: remindersWithImages.length,
-            itemBuilder: (context, index) {
-              final reminder = remindersWithImages[index];
-              return Container(
-                margin: const EdgeInsets.only(right: 12),
-                width: 110,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+    );
+  }
+
+  void _showPetPhotoSourceDialog() {
+    if (_selectedPetId == null || _selectedPetId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng chọn thú cưng trước khi lưu ảnh')),
+      );
+      return;
+    }
+
+    final titleController = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          20 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Ảnh kỷ niệm',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _textPrimary),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: titleController,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(
+                hintText: 'Tiêu đề kỷ niệm',
+                filled: true,
+                fillColor: const Color(0xFFF5F8FF),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: CachedNetworkImage(
-                    imageUrl: reminder.imageUrl!,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                    errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.grey),
-                  ),
-                ),
-              );
-            },
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: _primary),
+              title: const Text('Chụp ảnh'),
+              onTap: () {
+                Navigator.pop(context);
+                _savePetPhoto(ImageSource.camera, titleController.text.trim());
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: _primary),
+              title: const Text('Chọn ảnh từ thư viện'),
+              onTap: () {
+                Navigator.pop(context);
+                _savePetPhoto(ImageSource.gallery, titleController.text.trim());
+              },
+            ),
+          ],
           ),
         ),
-        const SizedBox(height: 24),
-      ],
+      ),
     );
+  }
+
+  Future<void> _savePetPhoto(ImageSource source, String title) async {
+    final petId = _selectedPetId;
+    if (petId == null || petId.isEmpty) return;
+
+    try {
+      final pickedFile = await _picker.pickImage(source: source, imageQuality: 75);
+      if (pickedFile == null) return;
+
+      setState(() => _isSavingPhoto = true);
+      final imageUrl = await _uploadService.uploadToCloudinary(File(pickedFile.path));
+      if (!mounted) return;
+
+      if (imageUrl == null || imageUrl.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Không thể tải ảnh lên')),
+        );
+        return;
+      }
+
+      await _petPhotoService.addPetPhoto(
+        petId: petId,
+        petName: _selectedPetName,
+        title: title,
+        imageUrl: imageUrl,
+        timestamp: DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+          DateTime.now().hour,
+          DateTime.now().minute,
+        ),
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã lưu ảnh kỷ niệm')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể lưu ảnh: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSavingPhoto = false);
+    }
   }
 
   // ─── Task Section ──────────────────────────────────────────────────────────
@@ -237,7 +430,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                   decoration: BoxDecoration(
-                    color: _primary.withOpacity(0.1),
+                    color: _primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -255,12 +448,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: reminders.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              separatorBuilder: (context, index) => const SizedBox(height: 10),
               itemBuilder: (context, i) {
                 final reminder = reminders[i];
                 return TaskCard(
                   task: reminder,
                   onToggle: (value) => _reminderService.toggleReminder(reminder.id, value),
+                  onDelete: () => _confirmDeleteReminder(reminder),
                 );
               },
             ),
@@ -278,7 +472,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             Container(
               width: 80, height: 80,
               decoration: BoxDecoration(
-                color: _primary.withOpacity(0.1),
+                color: _primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(40),
               ),
               child: const Icon(Icons.event_available_rounded, size: 40, color: _primary),
@@ -327,7 +521,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
               petId:    data.petId,
               petName:  data.petName,
               petBreed: data.petBreed,
-              imageUrl: data.imageUrl,
             );
           } else {
             await _reminderService.createRepeatingReminder(
@@ -340,11 +533,45 @@ class _CalendarScreenState extends State<CalendarScreen> {
               repeatType:    data.repeatType,
               repeatUntil:   data.repeatUntil!,
               repeatDays:    data.repeatDays,
-              imageUrl:      data.imageUrl,
             );
           }
         },
       ),
     );
+  }
+
+  Future<void> _confirmDeleteReminder(ReminderModel reminder) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xóa nhiệm vụ?'),
+        content: Text('Bạn có chắc muốn xóa "${reminder.title}" khỏi lịch không?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xóa', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _reminderService.deleteReminder(reminder.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã xóa nhiệm vụ')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể xóa nhiệm vụ: $e')),
+      );
+    }
   }
 }

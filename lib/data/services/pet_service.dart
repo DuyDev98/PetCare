@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -27,7 +28,7 @@ class PetService {
       if (photoURL != null) data['photoURL'] = photoURL;
       await _firestore.collection('users').doc(user.uid).set(data, SetOptions(merge: true));
     } catch (e) {
-      print("[PetService] Lỗi lưu userInfo: $e");
+      debugPrint("[PetService] Lỗi lưu userInfo: $e");
     }
   }
 
@@ -135,7 +136,7 @@ class PetService {
       await _firestore.collection('pets').doc(petId).update(data);
       return true;
     } catch (e) {
-      print("[PetService] Lỗi cập nhật pet: $e");
+      debugPrint("[PetService] Lỗi cập nhật pet: $e");
       return false;
     }
   }
@@ -146,7 +147,7 @@ class PetService {
       await _firestore.collection('pets').doc(petId).delete();
       return true;
     } catch (e) {
-      print("[PetService] Lỗi xóa pet: $e");
+      debugPrint("[PetService] Lỗi xóa pet: $e");
       return false;
     }
   }
@@ -187,11 +188,12 @@ class PetService {
     required String clinicName,
     required String note,
     String? imageUrl,
+    Map<String, dynamic>? extraData,
   }) async {
     User? user = _auth.currentUser;
     if (user == null) return false;
     try {
-      await _firestore.collection('medical_records').add({
+      final data = <String, dynamic>{
         'petId': petId,
         'userId': user.uid,
         'recordType': recordType,
@@ -201,22 +203,53 @@ class PetService {
         'note': note,
         'imageUrl': imageUrl ?? '',
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      };
+      if (extraData != null) data.addAll(extraData);
+      await _firestore.collection('medical_records').add(data);
       return true;
     } catch (e) {
-      print("[PetService] Lỗi thêm hồ sơ y tế: $e");
+      debugPrint("[PetService] Loi them ho so y te: $e");
       return false;
     }
   }
 
+  Future<bool> updateMedicalRecord({
+    required String recordId,
+    required String recordType,
+    required DateTime date,
+    required String title,
+    required String clinicName,
+    required String note,
+    String? imageUrl,
+    Map<String, dynamic>? extraData,
+  }) async {
+    try {
+      final data = <String, dynamic>{
+        'recordType': recordType,
+        'date': Timestamp.fromDate(date),
+        'title': title,
+        'clinicName': clinicName,
+        'note': note,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      if (imageUrl != null) data['imageUrl'] = imageUrl;
+      if (extraData != null) data.addAll(extraData);
+      await _firestore.collection('medical_records').doc(recordId).update(data);
+      return true;
+    } catch (e) {
+      debugPrint("[PetService] Loi cap nhat ho so y te: $e");
+      return false;
+    }
+  }
   // Xóa hồ sơ y tế
   Future<bool> deleteMedicalRecord(String recordId) async {
     try {
       await _firestore.collection('medical_records').doc(recordId).delete();
       return true;
     } catch (e) {
-      print("[PetService] Lỗi xóa hồ sơ y tế: $e");
+      debugPrint("[PetService] Lỗi xóa hồ sơ y tế: $e");
       return false;
     }
   }
 }
+

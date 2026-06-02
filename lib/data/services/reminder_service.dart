@@ -156,13 +156,10 @@ class ReminderService {
         .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(end))
         .orderBy('timestamp');
 
-    if (petId != null && petId.isNotEmpty) {
-      query = query.where('petId', isEqualTo: petId);
-    }
-
     return query.snapshots().map((snap) => snap.docs
         .map((d) => ReminderModel.fromMap(d.data() as Map<String, dynamic>, d.id))
         .where((r) => !r.isTemplate)
+        .where((r) => petId == null || petId.isEmpty || r.petId == petId)
         .toList());
   }
 

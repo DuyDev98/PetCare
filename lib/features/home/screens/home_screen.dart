@@ -6,8 +6,9 @@ import '../../../core/widgets/custom_bottom_nav_bar.dart';
 import 'setup_profile_screen.dart';
 import 'settings_screen.dart';
 import 'calendar_screen.dart';
-import '../../medical_records/screens/medical_history_screen.dart';
 import 'community_screen.dart';
+import 'pet_mart_screen.dart';
+import 'so_y_ba_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -63,11 +64,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     // Danh sách các màn hình tương ứng với Bottom Nav Bar
     final List<Widget> pages = [
-      _buildHomeContent(), // Tab 0: Trang chủ
-      const Center(child: Text('Dịch vụ (Coming Soon)')), // Tab 1: Dịch vụ
-      const CalendarScreen(), // Tab 2: Lịch
-      _buildMedicalTab(), // Tab 3: Khám bệnh
-      const CommunityScreen(), // Tab 4: Cộng đồng
+      _buildHomeContent(),
+      const PetMartScreen(),
+      const CalendarScreen(),
+      const SoYBaScreen(showBottomNav: false),
+      const CommunityScreen(),
     ];
 
     if (_isLoading) {
@@ -134,17 +135,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  // Logic hiển thị tab Y tế
-  Widget _buildMedicalTab() {
-    if (_pets.isEmpty) {
-      return const Center(child: Text('Vui lòng thêm thú cưng để xem sổ y bạ'));
-    }
-    return MedicalHistoryScreen(
-      petId: _pets[0]['id'],
-      petName: _pets[0]['name'],
     );
   }
 
@@ -441,8 +431,8 @@ class _HomeScreenState extends State<HomeScreen> {
             },
           ),
           _buildQuickActionButton(
-            icon: Icons.people_alt_outlined, 
-            label: 'Cộng đồng', 
+            icon: Icons.volunteer_activism_outlined,
+            label: 'Cứu trợ',
             bgColor: const Color(0xFF5B9BD5), 
             iconColor: Colors.white, 
             badgeCount: 3,

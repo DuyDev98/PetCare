@@ -73,9 +73,9 @@ class CustomBottomNavBar extends StatelessWidget {
             BottomNavigationBarItem(
               icon: Padding(
                 padding: EdgeInsets.only(bottom: 4),
-                child: Icon(Icons.people_outline, size: 28),
+                child: Icon(Icons.volunteer_activism_outlined, size: 28),
               ),
-              label: 'Cộng đồng',
+              label: 'Cứu trợ',
             ),
           ],
         ),

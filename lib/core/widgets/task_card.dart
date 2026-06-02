@@ -8,11 +8,13 @@ import '../constants/app_colors.dart';
 class TaskCard extends StatelessWidget {
   final ReminderModel task;
   final Function(bool) onToggle;
+  final VoidCallback? onDelete;
 
   const TaskCard({
     super.key,
     required this.task,
     required this.onToggle,
+    this.onDelete,
   });
 
   static const _textPrimary = AppColors.textBlack;
@@ -23,10 +25,10 @@ class TaskCard extends StatelessWidget {
       case ReminderType.bath:
         return _TaskVisual(
           icon: Icons.water_drop_rounded,
-          bgColor: AppColors.primary.withOpacity(0.1),
+          bgColor: AppColors.primary.withValues(alpha: 0.1),
           iconColor: AppColors.primary,
           tagColor: AppColors.primary,
-          tagBg: AppColors.primary.withOpacity(0.1),
+          tagBg: AppColors.primary.withValues(alpha: 0.1),
         );
       case ReminderType.vaccine:
         return const _TaskVisual(
@@ -87,7 +89,7 @@ class TaskCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -119,13 +121,24 @@ class TaskCard extends StatelessWidget {
                 '$timeStr • ${task.petName}',
                 style: const TextStyle(fontSize: 12, color: _textSecondary),
               ),
-              trailing: GestureDetector(
-                onTap: () => onToggle(!isDone),
-                child: Icon(
-                  isDone ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                  color: isDone ? Colors.green : Colors.grey[300],
-                  size: 28,
-                ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (onDelete != null)
+                    IconButton(
+                      tooltip: 'Xóa nhiệm vụ',
+                      onPressed: onDelete,
+                      icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 23),
+                    ),
+                  GestureDetector(
+                    onTap: () => onToggle(!isDone),
+                    child: Icon(
+                      isDone ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                      color: isDone ? Colors.green : Colors.grey[300],
+                      size: 28,
+                    ),
+                  ),
+                ],
               ),
             ),
             if (task.imageUrl != null && task.imageUrl!.isNotEmpty)
