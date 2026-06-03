@@ -5,10 +5,9 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/custom_bottom_nav_bar.dart';
 import 'setup_profile_screen.dart';
 import 'settings_screen.dart';
-import 'calendar_screen.dart';
 import 'community_screen.dart';
-import 'pet_mart_screen.dart';
-import 'so_y_ba_screen.dart';
+import '../../calendar/screens/calendar_screen.dart';
+import '../../medical/screens/so_y_ba_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -65,7 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Danh sách các màn hình tương ứng với Bottom Nav Bar
     final List<Widget> pages = [
       _buildHomeContent(),
-      const PetMartScreen(),
+      const Scaffold(body: Center(child: Text('Dịch vụ'))), // Tạm thời thay cho PetMartScreen
       const CalendarScreen(),
       const SoYBaScreen(showBottomNav: false),
       const CommunityScreen(),

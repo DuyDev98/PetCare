@@ -14,11 +14,27 @@
       },
       "oauth_client": [
         {
+          "client_id": "668771715108-kaap091vvfbbod8qepg5prtpp6q81uv1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.pet_care",
+            "certificate_hash": "13d7ffac82c8d57c43e138e9d314211bc5010f35"
+          }
+        },
+        {
           "client_id": "668771715108-l8cetgqtnv7bhdiv4otq1om95dnj6pvj.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.pet_care",
             "certificate_hash": "2546900ccde991f727ef48382503b7cd97cb78c3"
+          }
+        },
+        {
+          "client_id": "668771715108-m0alfp2utiao87f5i038gembv2iqf5b4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.pet_care",
+            "certificate_hash": "76abc5a2f03251e3f5d7f08293dc5246c8746c06"
           }
         },
         {

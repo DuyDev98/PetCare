@@ -2,152 +2,20 @@
 // Màn hình "Tìm thất lạc" – Flutter động, tích hợp Firestore
 // Deps: cloud_firestore, firebase_auth, cached_network_image, intl, image_picker, firebase_storage
 
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:pet_care/data/services/pet_service.dart';
 import 'package:intl/intl.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MODEL
-// ─────────────────────────────────────────────────────────────────────────────
-
-enum LostPetStatus { lost, found, injured }
-
-class LostPetPost {
-  final String id;
-  final String userId;
-  final String name;
-  final String kind;   // 'Chó' | 'Mèo' | 'Khác: ...'
-  final String breed;
-  final String description;
-  final double weight;
-  final String imageUrl;
-  final LostPetStatus status;
-  final bool isUrgent;
-  final GeoPoint location;
-  final String locationName; // tên khu vực hiển thị
-  final String phone;
-  final DateTime createdAt;
-
-  const LostPetPost({
-    required this.id,
-    required this.userId,
-    required this.name,
-    required this.kind,
-    required this.breed,
-    required this.description,
-    required this.weight,
-    required this.imageUrl,
-    required this.status,
-    required this.isUrgent,
-    required this.location,
-    required this.locationName,
-    required this.phone,
-    required this.createdAt,
-  });
-
-  factory LostPetPost.fromFirestore(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>;
-    return LostPetPost(
-      id:           doc.id,
-      userId:       d['userId']       ?? '',
-      name:         d['name']         ?? '',
-      kind:         d['kind']         ?? '',
-      breed:        d['breed']        ?? '',
-      description:  d['description']  ?? '',
-      weight:       (d['weight'] as num?)?.toDouble() ?? 0,
-      imageUrl:     d['imageUrl']     ?? '',
-      status:       d['status'] == 'found'
-          ? LostPetStatus.found
-          : d['status'] == 'injured'
-          ? LostPetStatus.injured
-          : LostPetStatus.lost,
-      isUrgent:     d['isUrgent']     ?? false,
-      location:     d['location']     as GeoPoint? ?? const GeoPoint(0, 0),
-      locationName: d['locationName'] ?? '',
-      phone:        d['phone']        ?? '',
-      createdAt:    (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-    );
-  }
-
-  Map<String, dynamic> toMap() => {
-    'userId':       userId,
-    'name':         name,
-    'kind':         kind,
-    'breed':        breed,
-    'description':  description,
-    'weight':       weight,
-    'imageUrl':     imageUrl,
-    'status':       status == LostPetStatus.found
-        ? 'found'
-        : status == LostPetStatus.injured
-        ? 'injured'
-        : 'lost',
-    'isUrgent':     isUrgent,
-    'location':     location,
-    'locationName': locationName,
-    'phone':        phone,
-    'createdAt':    FieldValue.serverTimestamp(),
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SERVICE
-// ─────────────────────────────────────────────────────────────────────────────
-
-class LostPetService {
-  static final _db  = FirebaseFirestore.instance;
-  static final _col = _db.collection('lost_pets');
-
-  /// Stream toàn bộ bài đăng (lọc theo status nếu có)
-  static Stream<List<LostPetPost>> postsStream({LostPetStatus? filter}) {
-    Query q = _col;
-    if (filter != null) {
-      final val = filter == LostPetStatus.found
-          ? 'found'
-          : filter == LostPetStatus.injured
-          ? 'injured'
-          : 'lost';
-      q = q.where('status', isEqualTo: val);
-    }
-    return q.snapshots().map((snap) {
-      final list = snap.docs
-          .map(LostPetPost.fromFirestore)
-          .toList();
-
-      list.sort((a, b) {
-        // Ưu tiên bài khẩn cấp lên trên
-        if (a.isUrgent && !b.isUrgent) return -1;
-        if (!a.isUrgent && b.isUrgent) return 1;
-        // Cùng mức khẩn cấp → mới nhất lên trên
-        return b.createdAt.compareTo(a.createdAt);
-      });
-
-      return list;
-    });
-  }
-
-  /// Đăng bài tìm thất lạc
-  static Future<void> createPost(LostPetPost post) =>
-      _col.add(post.toMap());
-
-  /// Cập nhật trạng thái
-  static Future<void> updateStatus(String id, LostPetStatus status) {
-    final val = status == LostPetStatus.found
-        ? 'found'
-        : status == LostPetStatus.injured
-        ? 'injured'
-        : 'lost';
-    return _col.doc(id).update({'status': val});
-  }
-
-  /// Xoá bài
-  static Future<void> deletePost(String id) => _col.doc(id).delete();
-}
+import '../models/lost_pet_model.dart';
+import '../services/lost_pet_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN SCREEN
@@ -1382,21 +1250,34 @@ class _CreatePostSheet extends StatefulWidget {
 
 class _CreatePostSheetState extends State<_CreatePostSheet> {
   final _formKey = GlobalKey<FormState>();
+  final _petService = PetService();
   final _nameCtrl   = TextEditingController();
   final _breedCtrl  = TextEditingController();
   final _descCtrl   = TextEditingController();
   final _weightCtrl = TextEditingController();
   final _phoneCtrl  = TextEditingController();
   final _locCtrl    = TextEditingController();
-  final _otherKindCtrl = TextEditingController(); // tên loại thú cưng khác
+  final _otherKindCtrl = TextEditingController();
 
   String _kind = 'Chó';
-  LostPetStatus _postStatus = LostPetStatus.lost; // loại tin đăng
+  LostPetStatus _postStatus = LostPetStatus.lost;
   bool _isUrgent = false;
   bool _isSaving = false;
-  XFile? _pickedImage; // ảnh đã chọn
+  XFile? _pickedImage;
+
+  List<Map<String, dynamic>> _locationSuggestions = [];
+  bool _isLoadingSuggestions = false;
+  String? _currentLocation;
+  bool _isLoadingCurrentLocation = false;
 
   static const _orange = Color(0xFFE07B2B);
+
+  @override
+  void initState() {
+    super.initState();
+    _getCurrentLocation();
+    _locCtrl.addListener(_onLocationChanged);
+  }
 
   @override
   void dispose() {
@@ -1407,22 +1288,144 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
     super.dispose();
   }
 
+  Future<void> _getCurrentLocation() async {
+    try {
+      setState(() => _isLoadingCurrentLocation = true);
+      final permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Cần cấp quyền truy cập vị trí')),
+          );
+        }
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      final placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        final address =
+            '${place.street}, ${place.subLocality}, ${place.locality}, ${place.administrativeArea}';
+        if (mounted) {
+          setState(() {
+            _currentLocation = address;
+            _locCtrl.text = address;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi lấy vị trí: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingCurrentLocation = false);
+    }
+  }
+
+  void _onLocationChanged() {
+    if (_locCtrl.text.isEmpty) {
+      setState(() => _locationSuggestions = []);
+      return;
+    }
+
+    if (_locCtrl.text == _currentLocation) {
+      setState(() => _locationSuggestions = []);
+      return;
+    }
+
+    _searchLocations(_locCtrl.text);
+  }
+
+  Future<void> _searchLocations(String query) async {
+    if (query.length < 3) {
+      setState(() => _locationSuggestions = []);
+      return;
+    }
+
+    try {
+      setState(() => _isLoadingSuggestions = true);
+      final response = await http.get(
+        Uri.parse(
+          'https://nominatim.openstreetmap.org/search?q=$query&format=json&addressdetails=1&limit=3&countrycodes=vn',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as List;
+        final suggestions = data
+            .take(3)
+            .map((item) => {
+                  'name': item['display_name'] ?? '',
+                  'lat': double.parse(item['lat'].toString()),
+                  'lon': double.parse(item['lon'].toString()),
+                })
+            .toList();
+
+        if (mounted) {
+          setState(() => _locationSuggestions = suggestions);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _locationSuggestions = []);
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingSuggestions = false);
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (_postStatus == LostPetStatus.lost && _nameCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng nhập tên thú cưng')),
+      );
+      return;
+    }
+
+    // Validate required fields
+    if (_pickedImage == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng chọn ảnh thú cưng')),
+      );
+      return;
+    }
+
+    if (_locCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng nhập vị trí')),
+      );
+      return;
+    }
+
+    if (_phoneCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng nhập số điện thoại liên hệ')),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-      // Upload ảnh nếu có
       String imageUrl = '';
       if (_pickedImage != null) {
-        final ref = FirebaseStorage.instance
-            .ref('lost_pets/${uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-        await ref.putFile(File(_pickedImage!.path));
-        imageUrl = await ref.getDownloadURL();
+        imageUrl = await _petService.uploadToCloudinary(File(_pickedImage!.path)) ?? '';
       }
 
-      // Xác định kind: nếu chọn "Khác" thì dùng tên nhập vào
       final kindValue = _kind == 'Khác'
           ? (_otherKindCtrl.text.trim().isNotEmpty
           ? _otherKindCtrl.text.trim()
@@ -1567,37 +1570,38 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
 
                   const SizedBox(height: 18),
 
-                  // TÊN THÚ CƯNG
-                  const Text(
-                    'Tên thú cưng',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
+                  // TÊN THÚ CƯNG - chỉ hiển thị khi chọn "đang lạc"
+                  if (_postStatus == LostPetStatus.lost) ...[
+                    const Text(
+                      'Tên thú cưng',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    _field(
+                      _nameCtrl,
+                      'VD: Mochi, Cục Bông, Lucky...',
+                      required: true,
+                    ),
+                    const SizedBox(height: 18),
+                  ],
 
-                  const SizedBox(height: 8),
+                  // GIỐNG - chỉ hiển thị khi chọn "đang lạc"
+                  if (_postStatus == LostPetStatus.lost) ...[
+                    const Text(
+                      'Giống',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
 
-                  _field(
-                    _nameCtrl,
-                    'VD: Mochi, Cục Bông, Lucky...',
-                    required: true,
-                  ),
+                    const SizedBox(height: 8),
 
-                  const SizedBox(height: 18),
+                    _field(
+                      _breedCtrl,
+                      'VD: Corgi, Poodle, Mèo Anh lông ngắn...',
+                      required: true,
+                    ),
 
-                  // GIỐNG
-                  const Text(
-                    'Giống',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  _field(
-                    _breedCtrl,
-                    'VD: Corgi, Poodle, Mèo Anh lông ngắn...',
-                    required: true,
-                  ),
-
-                  const SizedBox(height: 18),
+                    const SizedBox(height: 18),
+                  ],
 
                   // VỊ TRÍ
                   const Text(
@@ -1607,10 +1611,7 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
 
                   const SizedBox(height: 8),
 
-                  _field(
-                    _locCtrl,
-                    'VD: 55 Giải Phóng, Hà Nội',
-                  ),
+                  _buildLocationField(),
 
                   const SizedBox(height: 18),
 
@@ -1727,6 +1728,7 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                     _phoneCtrl,
                     '09xx xxx xxx',
                     keyboardType: TextInputType.phone,
+                    required: true,
                   ),
 
                   const SizedBox(height: 18),
@@ -1849,6 +1851,106 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildLocationField() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade400),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            children: [
+              TextField(
+                controller: _locCtrl,
+                decoration: InputDecoration(
+                  hintText: 'VD: 55 Giải Phóng, Hà Nội',
+                  hintStyle: const TextStyle(color: Colors.black38),
+                  filled: false,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  suffixIcon: _isLoadingCurrentLocation
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: Padding(
+                            padding: EdgeInsets.all(10),
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : null,
+                ),
+                onChanged: (_) => _onLocationChanged(),
+              ),
+              if (_locCtrl.text.isNotEmpty && _locCtrl.text != _currentLocation)
+                Positioned(
+                  right: 12,
+                  top: 0,
+                  bottom: 0,
+                  child: GestureDetector(
+                    onTap: () {
+                      _locCtrl.clear();
+                      setState(() => _locationSuggestions = []);
+                    },
+                    child: const Center(
+                      child: Icon(Icons.close, size: 20, color: Colors.grey),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (_locationSuggestions.isNotEmpty)
+            Container(
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: Column(
+                children: _locationSuggestions
+                    .asMap()
+                    .entries
+                    .map((entry) {
+                      final index = entry.key;
+                      final suggestion = entry.value;
+                      return GestureDetector(
+                        onTap: () {
+                          _locCtrl.text = suggestion['name'];
+                          setState(() => _locationSuggestions = []);
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: index < _locationSuggestions.length - 1
+                                ? Border(bottom: BorderSide(color: Colors.grey.shade100))
+                                : null,
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.location_on, size: 16, color: _orange),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  suggestion['name'],
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    })
+                    .toList(),
+              ),
+            ),
+        ],
       ),
     );
   }

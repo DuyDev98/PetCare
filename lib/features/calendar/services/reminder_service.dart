@@ -1,7 +1,7 @@
 // lib/data/services/reminder_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../models/reminder_model.dart';
+import 'package:pet_care/features/calendar/models/reminder_model.dart';
 
 class ReminderService {
   final CollectionReference _db = FirebaseFirestore.instance.collection('reminders');

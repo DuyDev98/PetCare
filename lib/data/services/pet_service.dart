@@ -5,13 +5,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'cloudinary_service.dart';
 
 class PetService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  String get _cloudName => dotenv.env['CLOUDINARY_CLOUD_NAME'] ?? "";
-  String get _uploadPreset => dotenv.env['CLOUDINARY_UPLOAD_PRESET'] ?? "";
+  final CloudinaryService _cloudinaryService = CloudinaryService();
 
   // 1. Lưu thông tin User
   Future<void> saveUserInfo({String? role, String? displayName, String? photoURL}) async {
@@ -34,23 +33,7 @@ class PetService {
 
   // 2. Upload to Cloudinary
   Future<String?> uploadToCloudinary(File file) async {
-    if (_cloudName.isEmpty || _uploadPreset.isEmpty) return null;
-    try {
-      final url = Uri.parse("https://api.cloudinary.com/v1_1/$_cloudName/image/upload");
-      var request = http.MultipartRequest("POST", url);
-      request.fields['upload_preset'] = _uploadPreset;
-      request.files.add(await http.MultipartFile.fromPath('file', file.path));
-      var response = await request.send().timeout(const Duration(seconds: 30));
-      if (response.statusCode == 200) {
-        var responseData = await response.stream.toBytes();
-        var responseString = utf8.decode(responseData);
-        var json = jsonDecode(responseString);
-        return json['secure_url']; 
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
+    return _cloudinaryService.uploadImage(file);
   }
 
   // 3. Lấy thông tin User hiện tại
@@ -164,90 +147,6 @@ class PetService {
       QuerySnapshot snapshot = await _firestore.collection('pets').where('ownerId', isEqualTo: user.uid).limit(1).get();
       return snapshot.docs.isNotEmpty;
     } catch (e) {
-      return false;
-    }
-  }
-
-  // --- HỒ SƠ Y TẾ (MEDICAL RECORDS) ---
-
-  // Lấy stream danh sách hồ sơ y tế của một thú cưng
-  Stream<QuerySnapshot> getMedicalRecordsStream(String petId) {
-    return _firestore
-        .collection('medical_records')
-        .where('petId', isEqualTo: petId)
-        .orderBy('date', descending: true)
-        .snapshots();
-  }
-
-  // Thêm hồ sơ y tế mới
-  Future<bool> addMedicalRecord({
-    required String petId,
-    required String recordType,
-    required DateTime date,
-    required String title,
-    required String clinicName,
-    required String note,
-    String? imageUrl,
-    Map<String, dynamic>? extraData,
-  }) async {
-    User? user = _auth.currentUser;
-    if (user == null) return false;
-    try {
-      final data = <String, dynamic>{
-        'petId': petId,
-        'userId': user.uid,
-        'recordType': recordType,
-        'date': Timestamp.fromDate(date),
-        'title': title,
-        'clinicName': clinicName,
-        'note': note,
-        'imageUrl': imageUrl ?? '',
-        'createdAt': FieldValue.serverTimestamp(),
-      };
-      if (extraData != null) data.addAll(extraData);
-      await _firestore.collection('medical_records').add(data);
-      return true;
-    } catch (e) {
-      debugPrint("[PetService] Loi them ho so y te: $e");
-      return false;
-    }
-  }
-
-  Future<bool> updateMedicalRecord({
-    required String recordId,
-    required String recordType,
-    required DateTime date,
-    required String title,
-    required String clinicName,
-    required String note,
-    String? imageUrl,
-    Map<String, dynamic>? extraData,
-  }) async {
-    try {
-      final data = <String, dynamic>{
-        'recordType': recordType,
-        'date': Timestamp.fromDate(date),
-        'title': title,
-        'clinicName': clinicName,
-        'note': note,
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-      if (imageUrl != null) data['imageUrl'] = imageUrl;
-      if (extraData != null) data.addAll(extraData);
-      await _firestore.collection('medical_records').doc(recordId).update(data);
-      return true;
-    } catch (e) {
-      debugPrint("[PetService] Loi cap nhat ho so y te: $e");
-      return false;
-    }
-  }
-  // Xóa hồ sơ y tế
-  Future<bool> deleteMedicalRecord(String recordId) async {
-    try {
-      await _firestore.collection('medical_records').doc(recordId).delete();
-      return true;
-    } catch (e) {
-      debugPrint("[PetService] Lỗi xóa hồ sơ y tế: $e");
       return false;
     }
   }

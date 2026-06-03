@@ -1,12 +1,14 @@
 ﻿// lib/core/widgets/add_task_bottom_sheet.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:pet_care/data/models/pet_model.dart';
-import 'package:pet_care/data/models/reminder_model.dart';
+import '../models/reminder_model.dart';
 import 'package:pet_care/data/services/firebase_service.dart';
+import 'package:pet_care/data/services/pet_service.dart';
 
 class TaskFormData {
   final String title;
-  final ReminderType type;
   final String petId;
   final String petName;
   final String petBreed;
@@ -14,10 +16,10 @@ class TaskFormData {
   final RepeatType repeatType;
   final List<int> repeatDays;
   final DateTime? repeatUntil;
+  final String? imageUrl;
 
   const TaskFormData({
     required this.title,
-    required this.type,
     required this.petId,
     required this.petName,
     required this.petBreed,
@@ -25,6 +27,7 @@ class TaskFormData {
     this.repeatType = RepeatType.none,
     this.repeatDays = const [],
     this.repeatUntil,
+    this.imageUrl,
   });
 }
 
@@ -46,12 +49,14 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _firebaseService = FirebaseService();
+  final _petService = PetService();
+  final _imagePicker = ImagePicker();
 
-  ReminderType _selectedType = ReminderType.feed;
   String?      _selectedPetId;
   String       _selectedPetName  = '';
   String       _selectedPetBreed = '';
   TimeOfDay    _selectedTime     = TimeOfDay.now();
+  File?        _imageFile;
 
   // Repeat state
   RepeatType   _repeatType       = RepeatType.none;
@@ -82,6 +87,11 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
     setState(() => _isSaving = true);
 
     try {
+      String? imageUrl;
+      if (_imageFile != null) {
+        imageUrl = await _petService.uploadToCloudinary(_imageFile!);
+      }
+
       final taskDate = DateTime(
         widget.selectedDate.year,
         widget.selectedDate.month,
@@ -98,7 +108,6 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
 
       await widget.onSave(TaskFormData(
         title:       title,
-        type:        _selectedType,
         petId:       _selectedPetId!,
         petName:     _selectedPetName,
         petBreed:    _selectedPetBreed,
@@ -106,6 +115,7 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
         repeatType:  _repeatType,
         repeatDays:  repeatDays,
         repeatUntil: repeatUntil,
+        imageUrl:    imageUrl,
       ));
 
       if (mounted) Navigator.of(context).pop();
@@ -175,41 +185,6 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
                 }
                 return null;
               },
-            ),
-            const SizedBox(height: 16),
-
-            // ── Loại nhiệm vụ ─────────────────────────────
-            _buildLabel('Loại nhiệm vụ'),
-            const SizedBox(height: 8),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: ReminderType.values.map((type) {
-                  final isSelected = type == _selectedType;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedType = type),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isSelected ? _primary : const Color(0xFFF5F8FF),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          type.label,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: isSelected ? Colors.white : _textSecondary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
             ),
             const SizedBox(height: 16),
 
@@ -284,6 +259,12 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+
+            // ── Ảnh ───────────────────────────────────────
+            _buildLabel('Ảnh minh họa (tùy chọn)'),
+            const SizedBox(height: 8),
+            _buildImagePicker(),
             const SizedBox(height: 16),
 
             // ── Lặp lại ───────────────────────────────────
@@ -470,5 +451,93 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
         letterSpacing: 0.3,
       ),
     );
+  }
+
+  Widget _buildImagePicker() {
+    return GestureDetector(
+      onTap: _showImageSourceDialog,
+      child: Container(
+        height: 120,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5F8FF),
+          borderRadius: BorderRadius.circular(14),
+          border: _imageFile != null ? Border.all(color: _primary, width: 2) : null,
+        ),
+        child: _imageFile != null
+            ? Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.file(_imageFile!, fit: BoxFit.cover),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _imageFile = null),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                        child: const Icon(Icons.close, color: Colors.white, size: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.add_a_photo_rounded, color: _primary, size: 30),
+                  const SizedBox(height: 8),
+                  Text('Tải ảnh lên', style: TextStyle(fontSize: 12, color: _textSecondary, fontWeight: FontWeight.w600)),
+                ],
+              ),
+      ),
+    );
+  }
+
+  void _showImageSourceDialog() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: _primary),
+              title: const Text('Chụp ảnh'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: _primary),
+              title: const Text('Chọn từ thư viện'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? pickedFile = await _imagePicker.pickImage(source: source, imageQuality: 50);
+      if (pickedFile != null) {
+        setState(() {
+          _imageFile = File(pickedFile.path);
+        });
+      }
+    } catch (e) {
+      debugPrint("Lỗi chọn ảnh: $e");
+    }
   }
 }

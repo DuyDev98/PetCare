@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../data/services/pet_service.dart';
+import '../services/medical_service.dart';
 
 class SoYBaScreen extends StatefulWidget {
   final bool showBottomNav;
@@ -27,6 +28,7 @@ class _SoYBaScreenState extends State<SoYBaScreen> {
   static const _muted = Color(0xFF6B7280);
 
   final PetService _petService = PetService();
+  final MedicalService _medicalService = MedicalService();
   late Future<List<Map<String, dynamic>>> _petsFuture;
   String? _selectedPetId;
 
@@ -76,7 +78,7 @@ class _SoYBaScreenState extends State<SoYBaScreen> {
                 _buildPetSelector(pets, selectedPet),
                 Expanded(
                   child: StreamBuilder<QuerySnapshot>(
-                    stream: _petService.getMedicalRecordsStream(_selectedPetId!),
+                    stream: _medicalService.getMedicalRecordsStream(_selectedPetId!),
                     builder: (context, recordSnapshot) {
                       if (recordSnapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator(color: _orangeDark));
@@ -493,7 +495,7 @@ class _SoYBaScreenState extends State<SoYBaScreen> {
         type: type,
         petId: petId,
         record: record,
-        petService: _petService,
+        petService: _medicalService,
       ),
     );
     if (saved == true && mounted) {
@@ -519,7 +521,7 @@ class _SoYBaScreenState extends State<SoYBaScreen> {
       ),
     );
     if (confirmed == true) {
-      await _petService.deleteMedicalRecord(recordId);
+      await _medicalService.deleteMedicalRecord(recordId);
     }
   }
 
@@ -614,7 +616,7 @@ class _RecordFormSheet extends StatefulWidget {
   final _RecordType type;
   final String petId;
   final _HealthRecord? record;
-  final PetService petService;
+  final MedicalService petService;
 
   const _RecordFormSheet({
     required this.type,

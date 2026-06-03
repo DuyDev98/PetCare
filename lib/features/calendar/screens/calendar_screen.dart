@@ -3,17 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pet_care/data/models/pet_model.dart';
 import 'package:pet_care/data/models/pet_photo_model.dart';
-import 'package:pet_care/data/models/reminder_model.dart';
+import 'package:pet_care/features/calendar/models/reminder_model.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:pet_care/core/constants/app_colors.dart';
 import 'package:pet_care/data/services/pet_photo_service.dart';
 import 'package:pet_care/data/services/pet_service.dart';
-import '../../../data/services/firebase_service.dart';
-import '../../../data/services/reminder_service.dart';
-import '../../../core/widgets/pet_avatar_selector.dart';
-import '../../../core/widgets/calendar_widget.dart';
-import '../../../core/widgets/task_card.dart';
-import '../../../core/widgets/add_task_bottom_sheet.dart';
+import 'package:pet_care/data/services/firebase_service.dart';
+import 'package:pet_care/features/calendar/services/reminder_service.dart';
+import '../widgets/pet_avatar_selector.dart';
+import '../widgets/calendar_widget.dart';
+import '../widgets/task_card.dart';
+import '../widgets/add_task_bottom_sheet.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -517,22 +517,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
             await _reminderService.createReminder(
               title:    data.title,
               dateTime: data.dateTime,
-              type:     data.type,
               petId:    data.petId,
               petName:  data.petName,
               petBreed: data.petBreed,
+              type:     ReminderType.other,
+              imageUrl: data.imageUrl,
             );
           } else {
             await _reminderService.createRepeatingReminder(
               title:         data.title,
               startDateTime: data.dateTime,
-              type:          data.type,
               petId:         data.petId,
               petName:       data.petName,
               petBreed:      data.petBreed,
               repeatType:    data.repeatType,
               repeatUntil:   data.repeatUntil!,
               repeatDays:    data.repeatDays,
+              type:          ReminderType.other,
+              imageUrl:      data.imageUrl,
             );
           }
         },

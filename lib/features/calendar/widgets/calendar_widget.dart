@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../constants/app_colors.dart';
+import 'package:pet_care/core/constants/app_colors.dart';
 
 class CalendarWidget extends StatefulWidget {
   final DateTime selectedDate;
@@ -19,6 +19,7 @@ class _CalendarWidgetState extends State<CalendarWidget> {
   late DateTime _displayMonth;
 
   static const _primary = AppColors.primary;
+  // ignore: unused_field
   static const _accent = AppColors.secondary;
   static const _textPrimary = Color(0xFF1E2D4E);
   static const _textSecondary = Color(0xFF8FA3BF);

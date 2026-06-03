@@ -1,9 +1,9 @@
 // lib/core/widgets/task_card.dart
 import 'package:flutter/material.dart';
-import 'package:pet_care/data/models/reminder_model.dart';
+import '../models/reminder_model.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../constants/app_colors.dart';
+import 'package:pet_care/core/constants/app_colors.dart';
 
 class TaskCard extends StatelessWidget {
   final ReminderModel task;

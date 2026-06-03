@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'lost_pet_screen.dart';
+import '../../lost_and_found/screens/lost_pet_screen.dart';
 
 class CommunityScreen extends StatelessWidget {
   const CommunityScreen({super.key});
