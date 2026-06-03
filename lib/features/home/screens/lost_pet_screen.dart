@@ -1,15 +1,21 @@
 // lib/features/lost_pet/screens/lost_pet_screen.dart
 // Màn hình "Tìm thất lạc" – Flutter động, tích hợp Firestore
-// Deps: cloud_firestore, firebase_auth, cached_network_image, intl, image_picker, firebase_storage
+// Deps: cloud_firestore, firebase_auth, cached_network_image, intl, image_picker
 
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MODEL
@@ -17,17 +23,23 @@ import 'package:intl/intl.dart';
 
 enum LostPetStatus { lost, found, injured }
 
+const _allKindsFilter = 'Tất cả';
+const _otherKindFilter = 'Khác';
+const _dogKind = 'Chó';
+const _catKind = 'Mèo';
+
 class LostPetPost {
   final String id;
   final String userId;
   final String name;
-  final String kind;   // 'Chó' | 'Mèo' | 'Khác: ...'
+  final String kind; // 'Chó' | 'Mèo' | 'Khác: ...'
   final String breed;
   final String description;
   final double weight;
   final String imageUrl;
   final LostPetStatus status;
   final bool isUrgent;
+  final bool isClosed;
   final GeoPoint location;
   final String locationName; // tên khu vực hiển thị
   final String phone;
@@ -44,6 +56,7 @@ class LostPetPost {
     required this.imageUrl,
     required this.status,
     required this.isUrgent,
+    required this.isClosed,
     required this.location,
     required this.locationName,
     required this.phone,
@@ -53,45 +66,47 @@ class LostPetPost {
   factory LostPetPost.fromFirestore(DocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>;
     return LostPetPost(
-      id:           doc.id,
-      userId:       d['userId']       ?? '',
-      name:         d['name']         ?? '',
-      kind:         d['kind']         ?? '',
-      breed:        d['breed']        ?? '',
-      description:  d['description']  ?? '',
-      weight:       (d['weight'] as num?)?.toDouble() ?? 0,
-      imageUrl:     d['imageUrl']     ?? '',
-      status:       d['status'] == 'found'
+      id: doc.id,
+      userId: d['userId'] ?? '',
+      name: d['name'] ?? '',
+      kind: d['kind'] ?? '',
+      breed: d['breed'] ?? '',
+      description: d['description'] ?? '',
+      weight: (d['weight'] as num?)?.toDouble() ?? 0,
+      imageUrl: d['imageUrl'] ?? '',
+      status: d['status'] == 'found'
           ? LostPetStatus.found
           : d['status'] == 'injured'
           ? LostPetStatus.injured
           : LostPetStatus.lost,
-      isUrgent:     d['isUrgent']     ?? false,
-      location:     d['location']     as GeoPoint? ?? const GeoPoint(0, 0),
+      isUrgent: d['isUrgent'] ?? false,
+      isClosed: d['isClosed'] ?? false,
+      location: d['location'] as GeoPoint? ?? const GeoPoint(0, 0),
       locationName: d['locationName'] ?? '',
-      phone:        d['phone']        ?? '',
-      createdAt:    (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      phone: d['phone'] ?? '',
+      createdAt: (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
 
   Map<String, dynamic> toMap() => {
-    'userId':       userId,
-    'name':         name,
-    'kind':         kind,
-    'breed':        breed,
-    'description':  description,
-    'weight':       weight,
-    'imageUrl':     imageUrl,
-    'status':       status == LostPetStatus.found
+    'userId': userId,
+    'name': name,
+    'kind': kind,
+    'breed': breed,
+    'description': description,
+    'weight': weight,
+    'imageUrl': imageUrl,
+    'status': status == LostPetStatus.found
         ? 'found'
         : status == LostPetStatus.injured
         ? 'injured'
         : 'lost',
-    'isUrgent':     isUrgent,
-    'location':     location,
+    'isUrgent': isUrgent,
+    'isClosed': isClosed,
+    'location': location,
     'locationName': locationName,
-    'phone':        phone,
-    'createdAt':    FieldValue.serverTimestamp(),
+    'phone': phone,
+    'createdAt': FieldValue.serverTimestamp(),
   };
 }
 
@@ -100,7 +115,7 @@ class LostPetPost {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class LostPetService {
-  static final _db  = FirebaseFirestore.instance;
+  static final _db = FirebaseFirestore.instance;
   static final _col = _db.collection('lost_pets');
 
   /// Stream toàn bộ bài đăng (lọc theo status nếu có)
@@ -115,9 +130,7 @@ class LostPetService {
       q = q.where('status', isEqualTo: val);
     }
     return q.snapshots().map((snap) {
-      final list = snap.docs
-          .map(LostPetPost.fromFirestore)
-          .toList();
+      final list = snap.docs.map(LostPetPost.fromFirestore).toList();
 
       list.sort((a, b) {
         // Ưu tiên bài khẩn cấp lên trên
@@ -132,8 +145,15 @@ class LostPetService {
   }
 
   /// Đăng bài tìm thất lạc
-  static Future<void> createPost(LostPetPost post) =>
-      _col.add(post.toMap());
+  static Future<void> createPost(LostPetPost post) => _col.add(post.toMap());
+
+  /// Theo dõi realtime một bài đăng cụ thể
+  static Stream<LostPetPost?> postStream(String id) {
+    return _col.doc(id).snapshots().map((doc) {
+      if (!doc.exists || doc.data() == null) return null;
+      return LostPetPost.fromFirestore(doc);
+    });
+  }
 
   /// Cập nhật trạng thái
   static Future<void> updateStatus(String id, LostPetStatus status) {
@@ -146,6 +166,60 @@ class LostPetService {
   }
 
   /// Xoá bài
+  static Future<void> updatePost(
+    String id, {
+    required String name,
+    required String kind,
+    required String breed,
+    required String description,
+    required double weight,
+    required String locationName,
+    required String phone,
+    required LostPetStatus status,
+    required bool isUrgent,
+  }) {
+    final val = status == LostPetStatus.found
+        ? 'found'
+        : status == LostPetStatus.injured
+        ? 'injured'
+        : 'lost';
+    return _col.doc(id).update({
+      'name': name,
+      'kind': kind,
+      'breed': breed,
+      'description': description,
+      'weight': weight,
+      'locationName': locationName,
+      'phone': phone,
+      'status': val,
+      'isUrgent': isUrgent,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  static Future<void> setClosed(String id, bool isClosed) {
+    return _col.doc(id).update({
+      'isClosed': isClosed,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  static Future<void> reportPost({
+    required LostPetPost post,
+    required String reason,
+    required String reporterId,
+  }) {
+    return _db.collection('lost_pet_reports').add({
+      'postId': post.id,
+      'postOwnerId': post.userId,
+      'reporterId': reporterId,
+      'reason': reason,
+      'createdAt': FieldValue.serverTimestamp(),
+      'postName': post.name,
+      'postPhone': post.phone,
+    });
+  }
+
   static Future<void> deletePost(String id) => _col.doc(id).delete();
 }
 
@@ -156,10 +230,7 @@ class LostPetService {
 class LostPetScreen extends StatefulWidget {
   final bool showBackButton;
 
-  const LostPetScreen({
-    super.key,
-    this.showBackButton = true,
-  });
+  const LostPetScreen({super.key, this.showBackButton = true});
 
   @override
   State<LostPetScreen> createState() => _LostPetScreenState();
@@ -170,20 +241,25 @@ class _LostPetScreenState extends State<LostPetScreen>
   late final TabController _tabController;
 
   // Tab index: 0 = tất cả, 1 = tin báo tìm thấy, 2 = tin báo đang lạc
-  static const _tabs = ['Tất cả', 'Tin báo tìm thấy', 'Tin báo đang lạc', 'Thú bị thương'];
+  static const _tabs = [
+    'Tất cả',
+    'Tin báo tìm thấy',
+    'Tin báo đang lạc',
+    'Thú bị thương',
+  ];
 
   String _searchQuery = '';
   bool _isGridView = true;
 
   // ── Active filter state ───────────────────────────────────
-  String _filterKind       = 'Tất cả';
-  RangeValues _filterWeight   = const RangeValues(0, 50);
-  bool _filterUrgentOnly      = false;
-  String _filterPostType      = 'Tất cả'; // 'Tất cả'|'Đang lạc'|'Tìm thấy'|'Bị thương'
+  String _filterKind = _allKindsFilter;
+  RangeValues _filterWeight = const RangeValues(0, 50);
+  bool _filterUrgentOnly = false;
+  LostPetStatus? _filterPostType;
 
-  static const _orange  = Color(0xFFE07B2B);
+  static const _orange = Color(0xFFE07B2B);
   static const _orangeL = Color(0xFFFFF3E6);
-  static const _grey    = Color(0xFF9E9E9E);
+  static const _grey = Color(0xFF9E9E9E);
 
   @override
   void initState() {
@@ -259,7 +335,10 @@ class _LostPetScreenState extends State<LostPetScreen>
         labelColor: _orange,
         unselectedLabelColor: _grey,
         labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400, fontSize: 13),
+        unselectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.w400,
+          fontSize: 13,
+        ),
         tabs: _tabs.map((t) => Tab(text: t)).toList(),
       ),
     );
@@ -280,7 +359,8 @@ class _LostPetScreenState extends State<LostPetScreen>
                 border: Border.all(color: _orange, width: 1.5),
               ),
               child: TextField(
-                onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+                onChanged: (v) =>
+                    setState(() => _searchQuery = v.toLowerCase()),
                 decoration: const InputDecoration(
                   hintText: 'Báo tìm kiếm',
                   hintStyle: TextStyle(color: _grey),
@@ -328,6 +408,7 @@ class _LostPetScreenState extends State<LostPetScreen>
               return Center(child: Text('Lỗi: ${snap.error}'));
             }
             final posts = (snap.data ?? []).where((p) {
+              if (p.isClosed) return false;
               // search query
               if (_searchQuery.isNotEmpty) {
                 final q = _searchQuery;
@@ -338,26 +419,23 @@ class _LostPetScreenState extends State<LostPetScreen>
                 }
               }
               // kind filter
-              if (_filterKind != 'Tất cả') {
-                if (_filterKind == 'Khác') {
-                  if (p.kind == 'Chó' || p.kind == 'Mèo') return false;
+              if (_filterKind != _allKindsFilter) {
+                if (_filterKind == _otherKindFilter) {
+                  if (p.kind == _dogKind || p.kind == _catKind) return false;
                 } else {
                   if (p.kind != _filterKind) return false;
                 }
               }
               // weight filter
-              if (p.weight < _filterWeight.start || p.weight > _filterWeight.end) {
+              if (p.weight < _filterWeight.start ||
+                  p.weight > _filterWeight.end) {
                 return false;
               }
               // urgent filter
               if (_filterUrgentOnly && !p.isUrgent) return false;
               // post type filter
-              if (_filterPostType != 'Tất cả') {
-                final match = (_filterPostType == 'Đang lạc'   && p.status == LostPetStatus.lost)   ||
-                    (_filterPostType == 'Tìm thấy'   && p.status == LostPetStatus.found)  ||
-                    (_filterPostType == 'Bị thương'  && p.status == LostPetStatus.injured);
-                if (!match) return false;
-              }
+              if (_filterPostType != null && p.status != _filterPostType)
+                return false;
               return true;
             }).toList();
 
@@ -375,7 +453,7 @@ class _LostPetScreenState extends State<LostPetScreen>
   // ── Grid ──────────────────────────────────────────────────
   Widget _buildGrid(List<LostPetPost> posts) {
     return GridView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 96),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         childAspectRatio: 0.52,
@@ -390,7 +468,7 @@ class _LostPetScreenState extends State<LostPetScreen>
   // ── List ──────────────────────────────────────────────────
   Widget _buildList(List<LostPetPost> posts) {
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(14, 4, 14, 96),
       itemCount: posts.length,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (ctx, i) => _ListCard(post: posts[i]),
@@ -404,8 +482,10 @@ class _LostPetScreenState extends State<LostPetScreen>
         children: [
           Icon(Icons.pets_rounded, size: 72, color: Colors.orange.shade200),
           const SizedBox(height: 12),
-          const Text('Chưa có bài đăng nào',
-              style: TextStyle(color: Colors.grey, fontSize: 15)),
+          const Text(
+            'Chưa có bài đăng nào',
+            style: TextStyle(color: Colors.grey, fontSize: 15),
+          ),
         ],
       ),
     );
@@ -430,16 +510,16 @@ class _LostPetScreenState extends State<LostPetScreen>
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) => _FilterSheet(
-        initialKind:        _filterKind,
-        initialWeight:      _filterWeight,
-        initialUrgentOnly:  _filterUrgentOnly,
-        initialPostType:    _filterPostType,
+        initialKind: _filterKind,
+        initialWeight: _filterWeight,
+        initialUrgentOnly: _filterUrgentOnly,
+        initialPostType: _filterPostType,
         onApply: (kind, weight, urgentOnly, postType) {
           setState(() {
-            _filterKind       = kind;
-            _filterWeight     = weight;
+            _filterKind = kind;
+            _filterWeight = weight;
             _filterUrgentOnly = urgentOnly;
-            _filterPostType   = postType;
+            _filterPostType = postType;
           });
         },
       ),
@@ -470,7 +550,7 @@ class _GridCard extends StatelessWidget {
   String _relativeTime(DateTime dt) {
     final diff = DateTime.now().difference(dt);
     if (diff.inMinutes < 60) return '${diff.inMinutes} phút trước';
-    if (diff.inHours < 24)  return '${diff.inHours} giờ trước';
+    if (diff.inHours < 24) return '${diff.inHours} giờ trước';
     return '${diff.inDays} ngày trước';
   }
 
@@ -494,98 +574,103 @@ class _GridCard extends StatelessWidget {
           ],
         ),
         clipBehavior: Clip.hardEdge,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Image + badge ──
-              Stack(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Image + badge ──
+            Stack(
+              children: [
+                AspectRatio(
+                  aspectRatio: 1.05,
+                  child: post.imageUrl.isNotEmpty
+                      ? Image.network(
+                          post.imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _placeholderImage(),
+                        )
+                      : _placeholderImage(),
+                ),
+                if (post.isUrgent)
+                  Positioned(top: 6, left: 6, child: _UrgentBadge()),
+                // Status label bottom-right of image
+                Positioned(
+                  bottom: 6,
+                  right: 6,
+                  child: _StatusChip(status: post.status),
+                ),
+              ],
+            ),
+            // ── Info ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  AspectRatio(
-                    aspectRatio: 1.05,
-                    child: post.imageUrl.isNotEmpty
-                        ? Image.network(
-                      post.imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _placeholderImage(),
-                    )
-                        : _placeholderImage(),
-                  ),
-                  if (post.isUrgent)
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: _UrgentBadge(),
+                  Text(
+                    'Tên: ${post.name}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
                     ),
-                  // Status label bottom-right of image
-                  Positioned(
-                    bottom: 6,
-                    right: 6,
-                    child: _StatusChip(status: post.status),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Giống: ${post.breed}',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    post.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: Colors.black45),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'Cân nặng: ${post.weight.toStringAsFixed(1)}kg',
+                    style: const TextStyle(fontSize: 11, color: Colors.black54),
+                  ),
+
+                  const SizedBox(height: 4),
+
+                  Text(
+                    DateFormat('dd/MM/yyyy').format(post.createdAt),
+                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                  ),
+
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.location_on,
+                        size: 11,
+                        color: Color(0xFFE07B2B),
+                      ),
+                      const SizedBox(width: 2),
+                      Expanded(
+                        child: Text(
+                          post.locationName,
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            color: Color(0xFFE07B2B),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _relativeTime(post.createdAt),
+                    style: const TextStyle(fontSize: 10, color: Colors.grey),
                   ),
                 ],
               ),
-              // ── Info ──
-              Padding(
-                padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Tên: ${post.name}',
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
-                    const SizedBox(height: 2),
-                    Text('Giống: ${post.breed}',
-                        style: const TextStyle(fontSize: 11.5, color: Colors.black54)),
-                    const SizedBox(height: 2),
-                    Text(
-                      post.description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, color: Colors.black45),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      'Cân nặng: ${post.weight.toStringAsFixed(1)}kg',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.black54,
-                      ),
-                    ),
-
-                    const SizedBox(height: 4),
-
-                    Text(
-                      DateFormat('dd/MM/yyyy').format(post.createdAt),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey,
-                      ),
-                    ),
-
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on, size: 11, color: Color(0xFFE07B2B)),
-                        const SizedBox(width: 2),
-                        Expanded(
-                          child: Text(
-                            post.locationName,
-                            style: const TextStyle(fontSize: 10.5, color: Color(0xFFE07B2B)),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _relativeTime(post.createdAt),
-                      style: const TextStyle(fontSize: 10, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -632,7 +717,9 @@ class _ListCard extends StatelessWidget {
           children: [
             // Image
             ClipRRect(
-              borderRadius: const BorderRadius.horizontal(left: Radius.circular(14)),
+              borderRadius: const BorderRadius.horizontal(
+                left: Radius.circular(14),
+              ),
               child: SizedBox(
                 width: 110,
                 height: 110,
@@ -640,8 +727,11 @@ class _ListCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     post.imageUrl.isNotEmpty
-                        ? Image.network(post.imageUrl, fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _placeholder())
+                        ? Image.network(
+                            post.imageUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _placeholder(),
+                          )
                         : _placeholder(),
                     if (post.isUrgent)
                       Positioned(top: 6, left: 6, child: _UrgentBadge()),
@@ -662,34 +752,66 @@ class _ListCard extends StatelessWidget {
                         const Spacer(),
                         Text(
                           DateFormat('dd/MM/yyyy').format(post.createdAt),
-                          style: const TextStyle(fontSize: 10.5, color: Colors.grey),
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            color: Colors.grey,
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 5),
-                    Text('Tên: ${post.name}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    Text('Giống: ${post.breed}',
-                        style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                    Text(
+                      'Tên: ${post.name}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      'Giống: ${post.breed}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                      ),
+                    ),
                     const SizedBox(height: 3),
-                    Text(post.description,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11, color: Colors.black45)),
+                    Text(
+                      post.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.black45,
+                      ),
+                    ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(Icons.location_on, size: 12, color: Color(0xFFE07B2B)),
+                        const Icon(
+                          Icons.location_on,
+                          size: 12,
+                          color: Color(0xFFE07B2B),
+                        ),
                         const SizedBox(width: 2),
                         Expanded(
-                          child: Text(post.locationName,
-                              style: const TextStyle(fontSize: 11, color: Color(0xFFE07B2B)),
-                              overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            post.locationName,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFFE07B2B),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),
-                    Text('Cân nặng: ${post.weight.toStringAsFixed(1)}kg',
-                        style: const TextStyle(fontSize: 11, color: Colors.black45)),
+                    Text(
+                      'Cân nặng: ${post.weight.toStringAsFixed(1)}kg',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.black45,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -702,7 +824,9 @@ class _ListCard extends StatelessWidget {
 
   Widget _placeholder() => Container(
     color: const Color(0xFFF5E6D3),
-    child: const Center(child: Icon(Icons.pets_rounded, size: 36, color: Color(0xFFE07B2B))),
+    child: const Center(
+      child: Icon(Icons.pets_rounded, size: 36, color: Color(0xFFE07B2B)),
+    ),
   );
 }
 
@@ -719,8 +843,8 @@ class _LostPetDetailScreen extends StatefulWidget {
 }
 
 class _LostPetDetailScreenState extends State<_LostPetDetailScreen> {
-  static const _orange  = Color(0xFFE07B2B);
-  static const _green   = Color(0xFF4CAF50);
+  static const _orange = Color(0xFFE07B2B);
+  static const _green = Color(0xFF4CAF50);
 
   bool _isUpdating = false;
   late LostPetStatus _currentStatus;
@@ -738,7 +862,8 @@ class _LostPetDetailScreenState extends State<_LostPetDetailScreen> {
     await _changeStatus(
       LostPetStatus.found,
       dialogTitle: 'Xác nhận tìm thấy',
-      dialogContent: 'Bạn xác nhận đã tìm thấy "${widget.post.name}"?\nBài đăng sẽ chuyển sang "Đã tìm thấy".',
+      dialogContent:
+          'Bạn xác nhận đã tìm thấy "${widget.post.name}"?\nBài đăng sẽ chuyển sang "Đã tìm thấy".',
       snackMsg: '🎉 Đã cập nhật: Tìm thấy thú cưng!',
       snackColor: const Color(0xFF4CAF50),
     );
@@ -748,19 +873,20 @@ class _LostPetDetailScreenState extends State<_LostPetDetailScreen> {
     await _changeStatus(
       LostPetStatus.found,
       dialogTitle: 'Xác nhận đã cứu trợ',
-      dialogContent: 'Bạn xác nhận thú cưng bị thương "${widget.post.name}" đã được cứu trợ / chữa trị xong?',
+      dialogContent:
+          'Bạn xác nhận thú cưng bị thương "${widget.post.name}" đã được cứu trợ / chữa trị xong?',
       snackMsg: '💚 Đã cập nhật: Thú cưng đã được cứu trợ!',
       snackColor: const Color(0xFF4CAF50),
     );
   }
 
   Future<void> _changeStatus(
-      LostPetStatus newStatus, {
-        required String dialogTitle,
-        required String dialogContent,
-        required String snackMsg,
-        required Color snackColor,
-      }) async {
+    LostPetStatus newStatus, {
+    required String dialogTitle,
+    required String dialogContent,
+    required String snackMsg,
+    required Color snackColor,
+  }) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -775,10 +901,15 @@ class _LostPetDetailScreenState extends State<_LostPetDetailScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: _green,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Xác nhận', style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'Xác nhận',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -796,9 +927,9 @@ class _LostPetDetailScreenState extends State<_LostPetDetailScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
       }
     } finally {
       if (mounted) setState(() => _isUpdating = false);
@@ -807,190 +938,235 @@ class _LostPetDetailScreenState extends State<_LostPetDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final post = widget.post;
-    final isResolved = _currentStatus == LostPetStatus.found;
-    final isInjured  = _currentStatus == LostPetStatus.injured;
-
     return Scaffold(
       backgroundColor: const Color(0xFFFAF7F4),
-      body: CustomScrollView(
-        slivers: [
-          // ── Hero image app bar ──
-          SliverAppBar(
-            expandedHeight: 300,
-            pinned: true,
-            backgroundColor: const Color(0xFFFAF7F4),
-            leading: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                margin: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
+      body: StreamBuilder<LostPetPost?>(
+        stream: LostPetService.postStream(widget.post.id),
+        builder: (context, snapshot) {
+          final post = snapshot.data ?? widget.post;
+          if (!_isUpdating) _currentStatus = post.status;
+          final isResolved = _currentStatus == LostPetStatus.found;
+          final isInjured = _currentStatus == LostPetStatus.injured;
+
+          if (snapshot.connectionState != ConnectionState.waiting &&
+              snapshot.data == null) {
+            return const Center(child: Text('Bài đăng không còn tồn tại.'));
+          }
+
+          return CustomScrollView(
+            slivers: [
+              // ── Hero image app bar ──
+              SliverAppBar(
+                expandedHeight: 300,
+                pinned: true,
+                backgroundColor: const Color(0xFFFAF7F4),
+                leading: GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    margin: const EdgeInsets.all(8),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 18,
+                      color: Colors.black87,
+                    ),
+                  ),
                 ),
-                child: const Icon(Icons.arrow_back_ios_new_rounded, size: 18, color: Colors.black87),
-              ),
-            ),
-            flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  post.imageUrl.isNotEmpty
-                      ? Image.network(
-                    post.imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _imagePlaceholder(),
-                  )
-                      : _imagePlaceholder(),
-                  // gradient overlay bottom
-                  Positioned(
-                    bottom: 0, left: 0, right: 0,
-                    child: Container(
-                      height: 80,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          colors: [
-                            Colors.black.withOpacity(0.45),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (post.isUrgent)
-                    Positioned(
-                      top: 16,
-                      right: 16,
-                      child: _UrgentBadge(),
-                    ),
-                  Positioned(
-                    bottom: 12,
-                    left: 16,
-                    child: _StatusChip(status: _currentStatus),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // ── Content ──
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 20, 18, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-
-                  // Name + date row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                flexibleSpace: FlexibleSpaceBar(
+                  background: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      Expanded(
-                        child: Text(
-                          post.name,
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
+                      post.imageUrl.isNotEmpty
+                          ? Image.network(
+                              post.imageUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => _imagePlaceholder(),
+                            )
+                          : _imagePlaceholder(),
+                      // gradient overlay bottom
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          height: 80,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: [
+                                Colors.black.withOpacity(0.45),
+                                Colors.transparent,
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Text(
-                          DateFormat('dd/MM/yyyy').format(post.createdAt),
-                          style: const TextStyle(fontSize: 11.5, color: Colors.grey),
-                        ),
+                      if (post.isUrgent)
+                        Positioned(top: 16, right: 16, child: _UrgentBadge()),
+                      Positioned(
+                        bottom: 12,
+                        left: 16,
+                        child: _StatusChip(status: _currentStatus),
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 16),
-
-                  // Info grid
-                  _infoGrid(post),
-
-                  const SizedBox(height: 20),
-
-                  // Location
-                  _sectionTitle('Vị trí thất lạc'),
-                  const SizedBox(height: 8),
-                  _infoRow(Icons.location_on_rounded, post.locationName.isNotEmpty ? post.locationName : 'Chưa cung cấp', color: _orange),
-
-                  const SizedBox(height: 20),
-
-                  // Description
-                  if (post.description.isNotEmpty) ...[
-                    _sectionTitle('Mô tả đặc điểm'),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade100),
-                      ),
-                      child: Text(
-                        post.description,
-                        style: const TextStyle(fontSize: 14, color: Colors.black87, height: 1.5),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-
-                  // Contact
-                  _sectionTitle('Thông tin liên hệ'),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade100),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFF3E6),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.phone_rounded, color: _orange, size: 20),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          post.phone.isNotEmpty ? post.phone : 'Chưa cung cấp',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: post.phone.isNotEmpty ? Colors.black87 : Colors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 28),
-
-                  // ── Action button (chỉ chủ bài) ──
-                  if (_isOwner) _buildOwnerButton(isResolved, isInjured),
-                ],
+                ),
               ),
-            ),
-          ),
-        ],
+
+              // ── Content ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 20, 18, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Name + date row
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              post.name,
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: Text(
+                              DateFormat('dd/MM/yyyy').format(post.createdAt),
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Info grid
+                      _infoGrid(post),
+
+                      const SizedBox(height: 20),
+
+                      // Location
+                      _sectionTitle('Vị trí thất lạc'),
+                      const SizedBox(height: 8),
+                      _infoRow(
+                        Icons.location_on_rounded,
+                        post.locationName.isNotEmpty
+                            ? post.locationName
+                            : 'Chưa cung cấp',
+                        color: _orange,
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Description
+                      if (post.description.isNotEmpty) ...[
+                        _sectionTitle('Mô tả đặc điểm'),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade100),
+                          ),
+                          child: Text(
+                            post.description,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.black87,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
+                      // Contact
+                      _sectionTitle('Thông tin liên hệ'),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade100),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF3E6),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.phone_rounded,
+                                color: _orange,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              post.phone.isNotEmpty
+                                  ? post.phone
+                                  : 'Chưa cung cấp',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: post.phone.isNotEmpty
+                                    ? Colors.black87
+                                    : Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      if (!_isOwner) _buildViewerActions(post),
+
+                      if (post.isClosed) ...[
+                        const SizedBox(height: 16),
+                        _closedBanner(),
+                      ],
+
+                      const SizedBox(height: 20),
+
+                      // ── Action button (chỉ chủ bài) ──
+                      if (_isOwner) _buildOwnerPanel(post, isResolved, isInjured),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1013,7 +1189,11 @@ class _LostPetDetailScreenState extends State<_LostPetDetailScreen> {
             SizedBox(width: 8),
             Text(
               'Đã xử lý xong 🎉',
-              style: TextStyle(color: _green, fontWeight: FontWeight.bold, fontSize: 15),
+              style: TextStyle(
+                color: _green,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
             ),
           ],
         ),
@@ -1028,18 +1208,28 @@ class _LostPetDetailScreenState extends State<_LostPetDetailScreen> {
         child: ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFFF9A825),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
           ),
           onPressed: _isUpdating ? null : _markAsRescued,
           icon: _isUpdating
               ? const SizedBox(
-            width: 18, height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-          )
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
               : const Icon(Icons.healing_rounded, color: Colors.white),
           label: Text(
             _isUpdating ? 'Đang cập nhật...' : 'Đánh dấu đã cứu trợ xong',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+            ),
           ),
         ),
       );
@@ -1052,18 +1242,28 @@ class _LostPetDetailScreenState extends State<_LostPetDetailScreen> {
       child: ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
           backgroundColor: _green,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
         onPressed: _isUpdating ? null : _markAsFound,
         icon: _isUpdating
             ? const SizedBox(
-          width: 18, height: 18,
-          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-        )
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
             : const Icon(Icons.pets_rounded, color: Colors.white),
         label: Text(
           _isUpdating ? 'Đang cập nhật...' : 'Đánh dấu đã tìm thấy',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 15,
+          ),
         ),
       ),
     );
@@ -1071,7 +1271,11 @@ class _LostPetDetailScreenState extends State<_LostPetDetailScreen> {
 
   Widget _sectionTitle(String text) => Text(
     text,
-    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.black87),
+    style: const TextStyle(
+      fontSize: 15,
+      fontWeight: FontWeight.w700,
+      color: Colors.black87,
+    ),
   );
 
   Widget _infoRow(IconData icon, String text, {Color color = Colors.black87}) {
@@ -1088,11 +1292,22 @@ class _LostPetDetailScreenState extends State<_LostPetDetailScreen> {
 
   Widget _infoGrid(LostPetPost post) {
     final items = [
-      _InfoItem(icon: Icons.category_rounded,   label: 'Loại',     value: post.kind),
-      _InfoItem(icon: Icons.pets_rounded,        label: 'Giống',    value: post.breed.isNotEmpty ? post.breed : '–'),
-      _InfoItem(icon: Icons.monitor_weight_rounded, label: 'Cân nặng', value: post.weight > 0 ? '${post.weight.toStringAsFixed(1)} kg' : '–'),
-      _InfoItem(icon: Icons.access_time_rounded, label: 'Đăng lúc',
-          value: DateFormat('HH:mm – dd/MM/yyyy').format(post.createdAt)),
+      _InfoItem(icon: Icons.category_rounded, label: 'Loại', value: post.kind),
+      _InfoItem(
+        icon: Icons.pets_rounded,
+        label: 'Giống',
+        value: post.breed.isNotEmpty ? post.breed : '–',
+      ),
+      _InfoItem(
+        icon: Icons.monitor_weight_rounded,
+        label: 'Cân nặng',
+        value: post.weight > 0 ? '${post.weight.toStringAsFixed(1)} kg' : '–',
+      ),
+      _InfoItem(
+        icon: Icons.access_time_rounded,
+        label: 'Đăng lúc',
+        value: DateFormat('HH:mm – dd/MM/yyyy').format(post.createdAt),
+      ),
     ];
     return GridView.count(
       crossAxisCount: 2,
@@ -1101,38 +1316,55 @@ class _LostPetDetailScreenState extends State<_LostPetDetailScreen> {
       mainAxisSpacing: 10,
       crossAxisSpacing: 10,
       childAspectRatio: 2.6,
-      children: items.map((item) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade100),
-        ),
-        child: Row(
-          children: [
-            Icon(item.icon, size: 18, color: _orange),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
+      children: items
+          .map(
+            (item) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade100),
+              ),
+              child: Row(
                 children: [
-                  Text(item.label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                  Text(item.value,
-                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
-                      overflow: TextOverflow.ellipsis),
+                  Icon(item.icon, size: 18, color: _orange),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          item.label,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        Text(
+                          item.value,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-          ],
-        ),
-      )).toList(),
+          )
+          .toList(),
     );
   }
 
   Widget _imagePlaceholder() => Container(
     color: const Color(0xFFF5E6D3),
-    child: const Center(child: Icon(Icons.pets_rounded, size: 72, color: Color(0xFFE07B2B))),
+    child: const Center(
+      child: Icon(Icons.pets_rounded, size: 72, color: Color(0xFFE07B2B)),
+    ),
   );
 }
 
@@ -1140,7 +1372,11 @@ class _InfoItem {
   final IconData icon;
   final String label;
   final String value;
-  const _InfoItem({required this.icon, required this.label, required this.value});
+  const _InfoItem({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 }
 
 class _PostTypeOption {
@@ -1178,7 +1414,14 @@ class _UrgentBadge extends StatelessWidget {
         children: [
           Icon(Icons.warning_amber_rounded, size: 11, color: Colors.white),
           SizedBox(width: 2),
-          Text('Khẩn cấp', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+          Text(
+            'Khẩn cấp',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
@@ -1198,17 +1441,17 @@ class _StatusChip extends StatelessWidget {
       case LostPetStatus.found:
         color = const Color(0xFF4CAF50);
         label = 'Tìm thấy';
-        icon  = Icons.check_circle_outline_rounded;
+        icon = Icons.check_circle_outline_rounded;
         break;
       case LostPetStatus.injured:
         color = const Color(0xFFF9A825);
         label = 'Bị thương';
-        icon  = Icons.healing_rounded;
+        icon = Icons.healing_rounded;
         break;
       case LostPetStatus.lost:
         color = const Color(0xFFE07B2B);
         label = 'Đang lạc';
-        icon  = Icons.location_searching_rounded;
+        icon = Icons.location_searching_rounded;
         break;
     }
     return Container(
@@ -1224,7 +1467,11 @@ class _StatusChip extends StatelessWidget {
           const SizedBox(width: 3),
           Text(
             label,
-            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -1240,8 +1487,14 @@ class _FilterSheet extends StatefulWidget {
   final String initialKind;
   final RangeValues initialWeight;
   final bool initialUrgentOnly;
-  final String initialPostType;
-  final void Function(String kind, RangeValues weight, bool urgentOnly, String postType) onApply;
+  final LostPetStatus? initialPostType;
+  final void Function(
+    String kind,
+    RangeValues weight,
+    bool urgentOnly,
+    LostPetStatus? postType,
+  )
+  onApply;
 
   const _FilterSheet({
     required this.initialKind,
@@ -1259,17 +1512,17 @@ class _FilterSheetState extends State<_FilterSheet> {
   late String _kind;
   late RangeValues _weight;
   late bool _urgentOnly;
-  late String _postType;
+  late LostPetStatus? _postType;
 
   static const _orange = Color(0xFFE07B2B);
 
   @override
   void initState() {
     super.initState();
-    _kind      = widget.initialKind;
-    _weight    = widget.initialWeight;
+    _kind = widget.initialKind;
+    _weight = widget.initialWeight;
     _urgentOnly = widget.initialUrgentOnly;
-    _postType  = widget.initialPostType;
+    _postType = widget.initialPostType;
   }
 
   @override
@@ -1280,7 +1533,10 @@ class _FilterSheetState extends State<_FilterSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Bộ lọc', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          const Text(
+            'Bộ lọc',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 16),
 
           // Lọc loại tin
@@ -1289,10 +1545,22 @@ class _FilterSheetState extends State<_FilterSheet> {
           Wrap(
             spacing: 8,
             children: [
-              _postTypeChip('Tất cả',   null),
-              _postTypeChip('Đang lạc', const Color(0xFFE07B2B)),
-              _postTypeChip('Tìm thấy', const Color(0xFF4CAF50)),
-              _postTypeChip('Bị thương', const Color(0xFFF9A825)),
+              _postTypeChip('Tất cả', null, null),
+              _postTypeChip(
+                'Đang lạc',
+                LostPetStatus.lost,
+                const Color(0xFFE07B2B),
+              ),
+              _postTypeChip(
+                'Tìm thấy',
+                LostPetStatus.found,
+                const Color(0xFF4CAF50),
+              ),
+              _postTypeChip(
+                'Bị thương',
+                LostPetStatus.injured,
+                const Color(0xFFF9A825),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -1301,20 +1569,26 @@ class _FilterSheetState extends State<_FilterSheet> {
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
-            children: ['Tất cả', 'Chó', 'Mèo', 'Khác'].map((k) {
-              final selected = _kind == k;
-              return ChoiceChip(
-                label: Text(k),
-                selected: selected,
-                selectedColor: const Color(0xFFFFE0C0),
-                onSelected: (_) => setState(() => _kind = k),
-                labelStyle: TextStyle(color: selected ? _orange : Colors.black54),
-              );
-            }).toList(),
+            children: [_allKindsFilter, _dogKind, _catKind, _otherKindFilter]
+                .map((k) {
+                  final selected = _kind == k;
+                  return ChoiceChip(
+                    label: Text(k),
+                    selected: selected,
+                    selectedColor: const Color(0xFFFFE0C0),
+                    onSelected: (_) => setState(() => _kind = k),
+                    labelStyle: TextStyle(
+                      color: selected ? _orange : Colors.black54,
+                    ),
+                  );
+                })
+                .toList(),
           ),
           const SizedBox(height: 14),
-          Text('Cân nặng: ${_weight.start.toInt()}kg – ${_weight.end.toInt()}kg',
-              style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(
+            'Cân nặng: ${_weight.start.toInt()}kg – ${_weight.end.toInt()}kg',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
           RangeSlider(
             values: _weight,
             min: 0,
@@ -1325,7 +1599,10 @@ class _FilterSheetState extends State<_FilterSheet> {
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Chỉ hiện khẩn cấp', style: TextStyle(fontWeight: FontWeight.w600)),
+            title: const Text(
+              'Chỉ hiện khẩn cấp',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
             value: _urgentOnly,
             activeColor: _orange,
             onChanged: (v) => setState(() => _urgentOnly = v),
@@ -1336,14 +1613,22 @@ class _FilterSheetState extends State<_FilterSheet> {
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: _orange,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
               onPressed: () {
                 widget.onApply(_kind, _weight, _urgentOnly, _postType);
                 Navigator.pop(context);
               },
-              child: const Text('Áp dụng', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: const Text(
+                'Áp dụng',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
         ],
@@ -1351,14 +1636,16 @@ class _FilterSheetState extends State<_FilterSheet> {
     );
   }
 
-  Widget _postTypeChip(String label, Color? color) {
-    final selected = _postType == label;
+  Widget _postTypeChip(String label, LostPetStatus? status, Color? color) {
+    final selected = _postType == status;
     final chipColor = color ?? _orange;
     return ChoiceChip(
       label: Text(label),
       selected: selected,
-      selectedColor: color != null ? color.withOpacity(0.18) : const Color(0xFFFFE0C0),
-      onSelected: (_) => setState(() => _postType = label),
+      selectedColor: color != null
+          ? color.withOpacity(0.18)
+          : const Color(0xFFFFE0C0),
+      onSelected: (_) => setState(() => _postType = status),
       labelStyle: TextStyle(
         color: selected ? (color ?? _orange) : Colors.black54,
         fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
@@ -1382,85 +1669,287 @@ class _CreatePostSheet extends StatefulWidget {
 
 class _CreatePostSheetState extends State<_CreatePostSheet> {
   final _formKey = GlobalKey<FormState>();
-  final _nameCtrl   = TextEditingController();
-  final _breedCtrl  = TextEditingController();
-  final _descCtrl   = TextEditingController();
+  final _scrollCtrl = ScrollController();
+  final _imageKey = GlobalKey();
+  final _nameCtrl = TextEditingController();
+  final _breedCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
   final _weightCtrl = TextEditingController();
-  final _phoneCtrl  = TextEditingController();
-  final _locCtrl    = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _locCtrl = TextEditingController();
   final _otherKindCtrl = TextEditingController(); // tên loại thú cưng khác
 
-  String _kind = 'Chó';
+  String _kind = _dogKind;
   LostPetStatus _postStatus = LostPetStatus.lost; // loại tin đăng
   bool _isUrgent = false;
   bool _isSaving = false;
+  bool _submitted = false;
+  bool _showImageError = false;
+  String? _formErrorText;
   XFile? _pickedImage; // ảnh đã chọn
+  Uint8List? _pickedImageBytes;
+  String? _pickedImageMimeType;
 
   static const _orange = Color(0xFFE07B2B);
 
   @override
   void dispose() {
-    _nameCtrl.dispose(); _breedCtrl.dispose();
-    _descCtrl.dispose(); _weightCtrl.dispose();
-    _phoneCtrl.dispose(); _locCtrl.dispose();
+    _scrollCtrl.dispose();
+    _nameCtrl.dispose();
+    _breedCtrl.dispose();
+    _descCtrl.dispose();
+    _weightCtrl.dispose();
+    _phoneCtrl.dispose();
+    _locCtrl.dispose();
     _otherKindCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _submitted = true;
+      _formErrorText = null;
+      _showImageError = false;
+    });
+
+    final isValid = _formKey.currentState?.validate() ?? false;
+    if (!isValid) {
+      setState(() {
+        _formErrorText =
+            'Vui lòng điền đầy đủ thông tin bắt buộc trước khi đăng bài.';
+      });
+      _scrollToTop();
+      return;
+    }
+
+    final pickedImage = _pickedImage;
+    final pickedImageBytes = _pickedImageBytes;
+    if (pickedImage == null ||
+        pickedImageBytes == null ||
+        pickedImageBytes.isEmpty) {
+      setState(() {
+        _showImageError = true;
+        _formErrorText =
+            'Vui lòng thêm ảnh thú cưng để người khác dễ nhận diện.';
+      });
+      _scrollToImage();
+      return;
+    }
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _showSnack('Bạn cần đăng nhập trước khi đăng bài.');
+      return;
+    }
+
     setState(() => _isSaving = true);
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-
-      // Upload ảnh nếu có
-      String imageUrl = '';
-      if (_pickedImage != null) {
-        final ref = FirebaseStorage.instance
-            .ref('lost_pets/${uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-        await ref.putFile(File(_pickedImage!.path));
-        imageUrl = await ref.getDownloadURL();
-      }
+      final uid = user.uid;
+      final weight = double.parse(_weightCtrl.text.trim().replaceAll(',', '.'));
+      final imageUrl = await _uploadPickedImage(
+        pickedImageBytes,
+        uid,
+        mimeType: _pickedImageMimeType,
+      );
 
       // Xác định kind: nếu chọn "Khác" thì dùng tên nhập vào
-      final kindValue = _kind == 'Khác'
+      final kindValue = _kind == _otherKindFilter
           ? (_otherKindCtrl.text.trim().isNotEmpty
-          ? _otherKindCtrl.text.trim()
-          : 'Khác')
+                ? _otherKindCtrl.text.trim()
+                : _otherKindFilter)
           : _kind;
 
       final post = LostPetPost(
-        id:           '',
-        userId:       uid,
-        name:         _nameCtrl.text.trim(),
-        kind:         kindValue,
-        breed:        _breedCtrl.text.trim(),
-        description:  _descCtrl.text.trim(),
-        weight:       double.tryParse(_weightCtrl.text) ?? 0,
-        imageUrl:     imageUrl,
-        status:       _postStatus,
-        isUrgent:     _isUrgent,
-        location:     const GeoPoint(10.776889, 106.700806),
+        id: '',
+        userId: uid,
+        name: _nameCtrl.text.trim(),
+        kind: kindValue,
+        breed: _breedCtrl.text.trim(),
+        description: _descCtrl.text.trim(),
+        weight: weight,
+        imageUrl: imageUrl,
+        status: _postStatus,
+        isUrgent: _isUrgent,
+        isClosed: false,
+        location: const GeoPoint(0, 0),
         locationName: _locCtrl.text.trim(),
-        phone:        _phoneCtrl.text.trim(),
-        createdAt:    DateTime.now(),
+        phone: _phoneCtrl.text.trim(),
+        createdAt: DateTime.now(),
       );
       await LostPetService.createPost(post);
       if (mounted) Navigator.pop(context);
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      _showSnack(_firebaseErrorMessage(e));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi: $e')),
-      );
+      _showSnack('Lỗi khi đăng bài. Vui lòng thử lại.');
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
+  Future<String> _uploadPickedImage(
+    Uint8List bytes,
+    String uid, {
+    String? mimeType,
+  }) async {
+    if (bytes.isEmpty) {
+      throw FirebaseException(
+        plugin: 'firebase_storage',
+        code: 'local-file-not-found',
+        message: 'Không đọc được ảnh đã chọn trên thiết bị.',
+      );
+    }
+
+    final cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME'] ?? '';
+    final uploadPreset = dotenv.env['CLOUDINARY_UPLOAD_PRESET'] ?? '';
+    if (cloudName.isEmpty || uploadPreset.isEmpty) {
+      throw FirebaseException(
+        plugin: 'cloudinary',
+        code: 'missing-config',
+        message: 'Thiếu cấu hình Cloudinary trong file .env.',
+      );
+    }
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final contentType = mimeType ?? 'image/jpeg';
+    final extension = contentType == 'image/png' ? 'png' : 'jpg';
+    final url = Uri.parse(
+      'https://api.cloudinary.com/v1_1/$cloudName/image/upload',
+    );
+    final request = http.MultipartRequest('POST', url)
+      ..fields['upload_preset'] = uploadPreset
+      ..fields['folder'] = 'lost_pets/$uid'
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: '$timestamp.$extension',
+        ),
+      );
+
+    final response = await request.send().timeout(const Duration(seconds: 30));
+    final responseBody = await response.stream.bytesToString();
+    if (response.statusCode != 200) {
+      throw FirebaseException(
+        plugin: 'cloudinary',
+        code: 'upload-failed',
+        message: responseBody,
+      );
+    }
+
+    final json = jsonDecode(responseBody) as Map<String, dynamic>;
+    final secureUrl = json['secure_url'] as String?;
+    if (secureUrl == null || secureUrl.isEmpty) {
+      throw FirebaseException(
+        plugin: 'cloudinary',
+        code: 'missing-url',
+        message: 'Cloudinary không trả về đường dẫn ảnh.',
+      );
+    }
+
+    return secureUrl;
+  }
+
+  String _firebaseErrorMessage(FirebaseException e) {
+    if (e.code == 'local-file-not-found') {
+      return 'Không đọc được ảnh đã chọn. Vui lòng chọn ảnh khác hoặc chụp ảnh mới.';
+    }
+    if (e.plugin == 'cloudinary') {
+      if (e.code == 'missing-config') {
+        return 'Thiếu cấu hình Cloudinary trong file .env.';
+      }
+      return 'Không tải được ảnh lên Cloudinary. Vui lòng thử lại.';
+    }
+    if (e.plugin == 'firebase_storage' && e.code == 'object-not-found') {
+      return 'Firebase Storage không tìm thấy ảnh sau khi tải lên. App hiện đã chuyển sang Cloudinary, hãy stop app rồi run lại.';
+    }
+    if (e.plugin == 'firebase_storage' && e.code == 'unauthorized') {
+      return 'Bạn chưa có quyền tải ảnh lên. Vui lòng kiểm tra đăng nhập hoặc Storage rules.';
+    }
+    if (e.plugin == 'cloud_firestore' && e.code == 'permission-denied') {
+      return 'Bạn chưa có quyền tạo bài đăng. Vui lòng kiểm tra đăng nhập hoặc Firestore rules.';
+    }
+    return 'Lỗi khi đăng bài. Vui lòng thử lại.';
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _scrollToTop() async {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    if (!_scrollCtrl.hasClients) return;
+    await _scrollCtrl.animateTo(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
+  Future<void> _scrollToImage() async {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final imageContext = _imageKey.currentContext;
+    if (imageContext == null || !imageContext.mounted) return;
+    await Scrollable.ensureVisible(
+      imageContext,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      alignment: 0.25,
+    );
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
     final img = await picker.pickImage(source: source, imageQuality: 80);
-    if (img != null) setState(() => _pickedImage = img);
+    if (img != null) {
+      final bytes = await _readPickedImageBytes(img);
+      if (bytes.isEmpty) {
+        setState(() {
+          _pickedImage = null;
+          _pickedImageBytes = null;
+          _pickedImageMimeType = null;
+          _showImageError = true;
+          _formErrorText =
+              'Không đọc được ảnh đã chọn. Vui lòng chọn ảnh khác hoặc chụp ảnh mới.';
+        });
+        _scrollToImage();
+        return;
+      }
+
+      setState(() {
+        _pickedImage = img;
+        _pickedImageBytes = bytes;
+        _pickedImageMimeType = img.mimeType;
+        _showImageError = false;
+        if (_formErrorText?.contains('ảnh') ?? false) _formErrorText = null;
+      });
+    }
+  }
+
+  Future<Uint8List> _readPickedImageBytes(XFile image) async {
+    try {
+      final bytes = await image.readAsBytes();
+      if (bytes.isNotEmpty) return bytes;
+    } catch (_) {
+      // Fall through to File-based read for Android picker cache paths.
+    }
+
+    final path = image.path;
+    if (path.isEmpty || path.startsWith('content://')) return Uint8List(0);
+
+    try {
+      final file = File(path);
+      if (!file.existsSync()) return Uint8List(0);
+      return file.readAsBytes();
+    } catch (_) {
+      return Uint8List(0);
+    }
   }
 
   void _showImageSourceDialog() {
@@ -1482,7 +1971,10 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library, color: Color(0xFFE07B2B)),
+              leading: const Icon(
+                Icons.photo_library,
+                color: Color(0xFFE07B2B),
+              ),
               title: const Text('Chọn từ thư viện'),
               onTap: () {
                 Navigator.pop(context);
@@ -1512,15 +2004,18 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
           child: Form(
             key: _formKey,
 
+            autovalidateMode: _submitted
+                ? AutovalidateMode.onUserInteraction
+                : AutovalidateMode.disabled,
+
             child: SingleChildScrollView(
+              controller: _scrollCtrl,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-
                   // HEADER
                   Row(
                     children: [
-
                       IconButton(
                         onPressed: () => Navigator.pop(context),
                         icon: const Icon(Icons.arrow_back_ios),
@@ -1542,6 +2037,42 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                   ),
 
                   const SizedBox(height: 25),
+
+                  if (_formErrorText != null) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFEBEB),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE53935)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.error_outline_rounded,
+                            color: Color(0xFFE53935),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _formErrorText!,
+                              style: const TextStyle(
+                                color: Color(0xFFE53935),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                  ],
 
                   // LOẠI TIN
                   const Text(
@@ -1607,10 +2138,7 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
 
                   const SizedBox(height: 8),
 
-                  _field(
-                    _locCtrl,
-                    'VD: 55 Giải Phóng, Hà Nội',
-                  ),
+                  _field(_locCtrl, 'VD: 55 Giải Phóng, Hà Nội', required: true),
 
                   const SizedBox(height: 18),
 
@@ -1623,6 +2151,7 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                   const SizedBox(height: 10),
 
                   GestureDetector(
+                    key: _imageKey,
                     onTap: _showImageSourceDialog,
                     child: Container(
                       height: 160,
@@ -1631,55 +2160,81 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                         border: Border.all(
                           color: _pickedImage != null
                               ? _orange
+                              : _showImageError
+                              ? const Color(0xFFE53935)
                               : Colors.grey.shade400,
+                          width: _showImageError ? 1.5 : 1,
                           style: BorderStyle.solid,
                         ),
                         borderRadius: BorderRadius.circular(12),
                         color: const Color(0xFFF7F3EF),
                       ),
                       clipBehavior: Clip.hardEdge,
-                      child: _pickedImage != null
+                      child: _pickedImageBytes != null
                           ? Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Image.file(
-                            File(_pickedImage!.path),
-                            fit: BoxFit.cover,
-                          ),
-                          Positioned(
-                            top: 6,
-                            right: 6,
-                            child: GestureDetector(
-                              onTap: () => setState(() => _pickedImage = null),
-                              child: Container(
-                                decoration: const BoxDecoration(
-                                  color: Colors.black54,
-                                  shape: BoxShape.circle,
+                              fit: StackFit.expand,
+                              children: [
+                                Image.memory(
+                                  _pickedImageBytes!,
+                                  fit: BoxFit.cover,
                                 ),
-                                padding: const EdgeInsets.all(4),
-                                child: const Icon(Icons.close, size: 16, color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        ],
-                      )
+                                Positioned(
+                                  top: 6,
+                                  right: 6,
+                                  child: GestureDetector(
+                                    onTap: () => setState(() {
+                                      _pickedImage = null;
+                                      _pickedImageBytes = null;
+                                      _pickedImageMimeType = null;
+                                    }),
+                                    child: Container(
+                                      decoration: const BoxDecoration(
+                                        color: Colors.black54,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      padding: const EdgeInsets.all(4),
+                                      child: const Icon(
+                                        Icons.close,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
                           : Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CircleAvatar(
-                            radius: 26,
-                            backgroundColor: Colors.orange.shade100,
-                            child: const Icon(Icons.camera_alt, color: Colors.orange),
-                          ),
-                          const SizedBox(height: 10),
-                          const Text(
-                            'Chụp/Tải ảnh thú cưng',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        ],
-                      ),
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                CircleAvatar(
+                                  radius: 26,
+                                  backgroundColor: Colors.orange.shade100,
+                                  child: const Icon(
+                                    Icons.camera_alt,
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                const Text(
+                                  'Chụp/Tải ảnh thú cưng',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              ],
+                            ),
                     ),
                   ),
+
+                  if (_showImageError) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Vui lòng thêm ảnh thú cưng',
+                      style: TextStyle(
+                        color: Color(0xFFE53935),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
 
                   const SizedBox(height: 18),
 
@@ -1710,7 +2265,10 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                   _field(
                     _weightCtrl,
                     'VD: 4.5',
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    validator: _validateWeight,
                   ),
 
                   const SizedBox(height: 18),
@@ -1727,6 +2285,7 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                     _phoneCtrl,
                     '09xx xxx xxx',
                     keyboardType: TextInputType.phone,
+                    validator: _validatePhone,
                   ),
 
                   const SizedBox(height: 18),
@@ -1736,7 +2295,10 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                     onTap: () => setState(() => _isUrgent = !_isUrgent),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                       decoration: BoxDecoration(
                         color: _isUrgent
                             ? const Color(0xFFFFEBEB)
@@ -1788,7 +2350,9 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                                   style: TextStyle(
                                     fontSize: 11.5,
                                     color: _isUrgent
-                                        ? const Color(0xFFE53935).withOpacity(0.8)
+                                        ? const Color(
+                                            0xFFE53935,
+                                          ).withOpacity(0.8)
                                         : Colors.grey,
                                   ),
                                 ),
@@ -1830,10 +2394,7 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Icon(
-                              Icons.send,
-                              color: Colors.white,
-                            ),
+                          : const Icon(Icons.send, color: Colors.white),
 
                       label: Text(
                         _isSaving ? 'Đang đăng...' : 'Đăng bài',
@@ -1906,27 +2467,34 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                     color: selected ? opt.color : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(opt.icon,
-                      color: selected ? Colors.white : Colors.grey, size: 20),
+                  child: Icon(
+                    opt.icon,
+                    color: selected ? Colors.white : Colors.grey,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(opt.label,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13.5,
-                            color: selected ? opt.color : Colors.black87,
-                          )),
-                      Text(opt.desc,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: selected
-                                ? opt.color.withOpacity(0.75)
-                                : Colors.grey,
-                          )),
+                      Text(
+                        opt.label,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13.5,
+                          color: selected ? opt.color : Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        opt.desc,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: selected
+                              ? opt.color.withOpacity(0.75)
+                              : Colors.grey,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1956,33 +2524,39 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
               value: _kind,
               isExpanded: true,
               items: const [
-                DropdownMenuItem(value: 'Chó',  child: Text('Chó')),
-                DropdownMenuItem(value: 'Mèo',  child: Text('Mèo')),
-                DropdownMenuItem(value: 'Khác', child: Text('Khác')),
+                DropdownMenuItem<String>(
+                  value: _dogKind,
+                  child: Text(_dogKind),
+                ),
+                DropdownMenuItem<String>(
+                  value: _catKind,
+                  child: Text(_catKind),
+                ),
+                DropdownMenuItem<String>(
+                  value: _otherKindFilter,
+                  child: Text(_otherKindFilter),
+                ),
               ],
               onChanged: (v) => setState(() => _kind = v!),
             ),
           ),
         ),
-        if (_kind == 'Khác') ...[
+        if (_kind == _otherKindFilter) ...[
           const SizedBox(height: 10),
-          _field(
-            _otherKindCtrl,
-            'VD: Thỏ, Hamster, Chim...',
-            required: true,
-          ),
+          _field(_otherKindCtrl, 'VD: Thỏ, Hamster, Chim...', required: true),
         ],
       ],
     );
   }
 
   Widget _field(
-      TextEditingController ctrl,
-      String hint, {
-        bool required = false,
-        int maxLines = 1,
-        TextInputType keyboardType = TextInputType.text,
-      }) {
+    TextEditingController ctrl,
+    String hint, {
+    bool required = false,
+    int maxLines = 1,
+    TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TextFormField(
@@ -1998,12 +2572,39 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
             borderRadius: BorderRadius.circular(10),
             borderSide: BorderSide.none,
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
         ),
-        validator: required
-            ? (v) => (v == null || v.trim().isEmpty) ? 'Vui lòng nhập $hint' : null
-            : null,
+        validator:
+            validator ??
+            (required
+                ? (v) => (v == null || v.trim().isEmpty)
+                      ? 'Vui lòng nhập $hint'
+                      : null
+                : null),
       ),
     );
+  }
+
+  String? _validateWeight(String? value) {
+    final raw = value?.trim().replaceAll(',', '.') ?? '';
+    if (raw.isEmpty) return 'Vui lòng nhập cân nặng';
+    final weight = double.tryParse(raw);
+    if (weight == null || weight <= 0 || weight > 100) {
+      return 'Cân nặng phải là số từ 0 đến 100kg';
+    }
+    return null;
+  }
+
+  String? _validatePhone(String? value) {
+    final raw = value?.trim() ?? '';
+    if (raw.isEmpty) return 'Vui lòng nhập số điện thoại';
+    final compact = raw.replaceAll(RegExp(r'[\s.-]'), '');
+    if (!RegExp(r'^(0|\+84)\d{9,10}$').hasMatch(compact)) {
+      return 'Số điện thoại không hợp lệ';
+    }
+    return null;
   }
 }
