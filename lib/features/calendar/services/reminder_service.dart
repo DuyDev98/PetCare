@@ -1,10 +1,14 @@
 // lib/data/services/reminder_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pet_care/data/services/local_notification_service.dart';
+import 'package:pet_care/data/services/notification_service.dart';
 import 'package:pet_care/features/calendar/models/reminder_model.dart';
 
 class ReminderService {
   final CollectionReference _db = FirebaseFirestore.instance.collection('reminders');
+  final _localNotificationService = LocalNotificationService();
+  final _notificationService = NotificationService();
 
   String get _uid => FirebaseAuth.instance.currentUser?.uid ?? '';
 
@@ -20,7 +24,7 @@ class ReminderService {
     String status = 'pending',
     String? imageUrl,
   }) async {
-    await _db.add({
+    final docRef = await _db.add({
       'userId':      _uid,
       'title':       title,
       'timestamp':   Timestamp.fromDate(dateTime),
@@ -36,6 +40,21 @@ class ReminderService {
       'repeatUntil': null,
       'parentId':    null,
     });
+
+    // Schedule local notification
+    await _localNotificationService.scheduleNotification(
+      id: docRef.id.hashCode,
+      title: 'Nhắc nhở: $title',
+      body: 'Đã đến giờ chăm sóc $petName rồi!',
+      scheduledDate: dateTime,
+    );
+
+    // Add to in-app notification history
+    await _notificationService.addNotification(
+      title: 'Đã tạo nhắc nhở: $title',
+      content: 'Nhắc nhở cho $petName vào ${dateTime.hour}:${dateTime.minute} ngày ${dateTime.day}/${dateTime.month}',
+      type: 'reminder',
+    );
   }
 
   // ── Tạo nhắc nhở lặp lại ─────────────────────────────────
@@ -98,8 +117,23 @@ class ReminderService {
         'repeatUntil': Timestamp.fromDate(repeatUntil),
         'parentId':    templateRef.id,
       });
+
+      // Schedule local notification for each instance
+      await _localNotificationService.scheduleNotification(
+        id: instanceRef.id.hashCode,
+        title: 'Nhắc nhở lặp lại: $title',
+        body: 'Đã đến giờ chăm sóc $petName rồi!',
+        scheduledDate: date,
+      );
     }
     await batch.commit();
+
+    // Add to in-app notification history
+    await _notificationService.addNotification(
+      title: 'Đã tạo nhắc nhở lặp lại: $title',
+      content: 'Nhắc nhở $repeatType.key cho $petName',
+      type: 'reminder',
+    );
   }
 
   List<DateTime> _generateDates({

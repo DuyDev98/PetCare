@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pet_care/data/models/pet_model.dart';
 import 'package:pet_care/data/models/pet_photo_model.dart';
+import 'package:pet_care/data/services/notification_service.dart';
+import 'package:pet_care/data/services/local_notification_service.dart';
 import 'package:pet_care/features/calendar/models/reminder_model.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:pet_care/core/constants/app_colors.dart';
@@ -10,6 +12,7 @@ import 'package:pet_care/data/services/pet_photo_service.dart';
 import 'package:pet_care/data/services/pet_service.dart';
 import 'package:pet_care/data/services/firebase_service.dart';
 import 'package:pet_care/features/calendar/services/reminder_service.dart';
+import 'package:pet_care/features/home/screens/notification_screen.dart';
 import '../widgets/pet_avatar_selector.dart';
 import '../widgets/calendar_widget.dart';
 import '../widgets/task_card.dart';
@@ -27,6 +30,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   final _reminderService = ReminderService();
   final _petPhotoService = PetPhotoService();
   final _uploadService   = PetService();
+  final _notificationService = NotificationService();
   final _picker          = ImagePicker();
 
   DateTime _selectedDate  = DateTime.now();
@@ -111,29 +115,48 @@ class _CalendarScreenState extends State<CalendarScreen> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _textPrimary),
             ),
           ),
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(color: _primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.notifications_none_rounded, color: _primary, size: 22),
-              ),
-              Positioned(
-                top: -2, right: -2,
-                child: Container(
-                  width: 18, height: 18,
-                  decoration: BoxDecoration(
-                    color: Colors.redAccent,
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(color: Colors.white, width: 1.5),
-                  ),
-                  child: const Center(
-                    child: Text('3', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
-                  ),
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const NotificationScreen()),
+              );
+            },
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(color: _primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.notifications_none_rounded, color: _primary, size: 22),
                 ),
-              ),
-            ],
+                StreamBuilder<int>(
+                  stream: _notificationService.getUnreadCountStream(),
+                  builder: (context, snapshot) {
+                    final count = snapshot.data ?? 0;
+                    if (count == 0) return const SizedBox.shrink();
+
+                    return Positioned(
+                      top: -2, right: -2,
+                      child: Container(
+                        width: 18, height: 18,
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        child: Center(
+                          child: Text(
+                            '$count',
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -497,6 +520,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Widget _buildFAB() {
     return FloatingActionButton(
+      heroTag: 'calendar_fab',
       onPressed: _showAddTaskSheet,
       backgroundColor: _primary,
       elevation: 4,
@@ -523,6 +547,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
               type:     ReminderType.other,
               imageUrl: data.imageUrl,
             );
+
+            // Schedule notification
+            LocalNotificationService().scheduleNotification(
+              id: data.dateTime.millisecondsSinceEpoch ~/ 1000,
+              title: data.title,
+              body: '${data.petName} - ${data.petBreed}',
+              scheduledDate: data.dateTime,
+            );
           } else {
             await _reminderService.createRepeatingReminder(
               title:         data.title,
@@ -535,6 +567,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
               repeatDays:    data.repeatDays,
               type:          ReminderType.other,
               imageUrl:      data.imageUrl,
+            );
+
+            // Schedule first notification
+            LocalNotificationService().scheduleNotification(
+              id: data.dateTime.millisecondsSinceEpoch ~/ 1000,
+              title: data.title,
+              body: '${data.petName} - ${data.petBreed}',
+              scheduledDate: data.dateTime,
             );
           }
         },

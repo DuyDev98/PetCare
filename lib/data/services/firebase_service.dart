@@ -30,6 +30,18 @@ class FirebaseService {
     }
   }
 
+  Future<void> saveFcmToken(String token) async {
+    if (_uid.isEmpty) return;
+    try {
+      await _db.collection('users').doc(_uid).set({
+        'fcmToken': token,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      print('[FirebaseService] Lỗi lưu FCM token: $e');
+    }
+  }
+
   // ── Pets ──────────────────────────────────────────────────
 
   /// Stream danh sách pet của user hiện tại

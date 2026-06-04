@@ -1,10 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:pet_care/data/services/local_notification_service.dart';
+import 'package:pet_care/data/services/notification_service.dart';
 
 class MedicalService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final _localNotificationService = LocalNotificationService();
+  final _notificationService = NotificationService();
 
   // Lấy stream danh sách hồ sơ y tế của một thú cưng
   Stream<QuerySnapshot> getMedicalRecordsStream(String petId) {
@@ -41,7 +45,25 @@ class MedicalService {
         'createdAt': FieldValue.serverTimestamp(),
       };
       if (extraData != null) data.addAll(extraData);
-      await _firestore.collection('medical_records').add(data);
+      final docRef = await _firestore.collection('medical_records').add(data);
+
+      // Schedule notification for vaccine or visit if date is in future
+      if (date.isAfter(DateTime.now())) {
+        await _localNotificationService.scheduleNotification(
+          id: docRef.id.hashCode,
+          title: 'Sổ y bạ: $title',
+          body: 'Bạn có lịch hẹn tại $clinicName',
+          scheduledDate: date,
+        );
+      }
+
+      // Add to in-app history
+      await _notificationService.addNotification(
+        title: 'Cập nhật sổ y bạ: $title',
+        content: 'Hồ sơ mới đã được thêm cho thú cưng của bạn.',
+        type: 'medical',
+      );
+
       return true;
     } catch (e) {
       debugPrint("[MedicalService] Loi them ho so y te: $e");

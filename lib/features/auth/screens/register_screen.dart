@@ -57,7 +57,9 @@ class _RegisterState extends State<Register> {
         });
       }
     } catch (e) {
-      UIHelpers.showSnackBar(context, "Không thể chọn ảnh: $e", isError: true);
+      if (mounted) {
+        UIHelpers.showSnackBar(context, "Không thể chọn ảnh: $e", isError: true);
+      }
     }
   }
 

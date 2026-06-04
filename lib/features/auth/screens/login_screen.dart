@@ -53,6 +53,8 @@ class _LoginState extends State<Login> {
 
     final error = await _authController.signIn(email, password);
     
+    if (!mounted) return;
+
     if (error == null) {
       UIHelpers.showSnackBar(context, "Đăng nhập thành công!");
       // AuthWrapper trong main.dart sẽ tự động điều hướng
@@ -64,11 +66,13 @@ class _LoginState extends State<Login> {
   Future<void> _handleGoogleSignIn() async {
     final error = await _authController.signInWithGoogle();
     
+    if (!mounted) return;
+
     if (error == null) {
       UIHelpers.showSnackBar(context, "Đăng nhập Google thành công!");
       // AuthWrapper trong main.dart sẽ tự động điều hướng
     } else if (error != "Hủy đăng nhập") {
-      UIHelpers.showSnackBar(context, error ?? "Lỗi đăng nhập Google", isError: true);
+      UIHelpers.showSnackBar(context, error, isError: true);
     }
   }
 

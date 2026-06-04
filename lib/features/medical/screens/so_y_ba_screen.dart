@@ -108,6 +108,7 @@ class _SoYBaScreenState extends State<SoYBaScreen> {
       floatingActionButton: _selectedPetId == null
           ? null
           : FloatingActionButton(
+              heroTag: 'medical_fab',
               backgroundColor: _orangeDark,
               foregroundColor: Colors.white,
               onPressed: () => _openAddMenu(_selectedPetId!),

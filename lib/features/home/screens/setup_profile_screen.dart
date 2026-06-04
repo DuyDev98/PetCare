@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pet_care/data/services/pet_service.dart';
-import 'package:pet_care/features/home/screens/home_screen.dart';
 import '../../../core/utils/ui_helpers.dart';
 
 class SetupProfileScreen extends StatefulWidget {
@@ -75,7 +74,9 @@ class _SetupProfileScreenState extends State<SetupProfileScreen> {
         });
       }
     } catch (e) {
-      UIHelpers.showSnackBar(context, "Lỗi chọn ảnh: $e", isError: true);
+      if (mounted) {
+        UIHelpers.showSnackBar(context, "Lỗi chọn ảnh: $e", isError: true);
+      }
     }
   }
 
