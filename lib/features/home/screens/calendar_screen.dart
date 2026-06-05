@@ -23,21 +23,21 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
-  final _petService      = FirebaseService();
+  final _petService = FirebaseService();
   final _reminderService = ReminderService();
   final _petPhotoService = PetPhotoService();
-  final _uploadService   = PetService();
-  final _picker          = ImagePicker();
+  final _uploadService = PetService();
+  final _picker = ImagePicker();
 
-  DateTime _selectedDate  = DateTime.now();
-  String?  _selectedPetId;
-  String   _selectedPetName = '';
-  bool     _isSavingPhoto = false;
+  DateTime _selectedDate = DateTime.now();
+  String? _selectedPetId;
+  String _selectedPetName = '';
+  bool _isSavingPhoto = false;
 
   // Colors - Using unified AppColors
-  static const Color _primary       = AppColors.primary;
-  static const Color _bg            = Color(0xFFF8F9FA);
-  static const Color _textPrimary   = AppColors.textBlack;
+  static const Color _primary = AppColors.primary;
+  static const Color _bg = Color(0xFFF8F9FA);
+  static const Color _textPrimary = AppColors.textBlack;
   static const Color _textSecondary = AppColors.textGrey;
 
   @override
@@ -50,10 +50,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
             _buildHeader(),
             Expanded(
               child: StreamBuilder<List<ReminderModel>>(
-                stream: _reminderService.getRemindersByDate(_selectedDate, petId: _selectedPetId),
+                stream: _reminderService.getRemindersByDate(
+                  _selectedDate,
+                  petId: _selectedPetId,
+                ),
                 builder: (context, snapshot) {
                   final reminders = snapshot.data ?? [];
-                  
+
                   return SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
                     child: Column(
@@ -100,7 +103,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             color: Color(0x0A000000),
             blurRadius: 8,
             offset: Offset(0, 2),
-          )
+          ),
         ],
       ),
       child: Row(
@@ -108,28 +111,49 @@ class _CalendarScreenState extends State<CalendarScreen> {
           const Expanded(
             child: Text(
               'Lịch chăm sóc & Nhắc nhở',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _textPrimary),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: _textPrimary,
+              ),
             ),
           ),
           Stack(
             clipBehavior: Clip.none,
             children: [
               Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(color: _primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.notifications_none_rounded, color: _primary, size: 22),
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: _primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.notifications_none_rounded,
+                  color: _primary,
+                  size: 22,
+                ),
               ),
               Positioned(
-                top: -2, right: -2,
+                top: -2,
+                right: -2,
                 child: Container(
-                  width: 18, height: 18,
+                  width: 18,
+                  height: 18,
                   decoration: BoxDecoration(
                     color: Colors.redAccent,
                     borderRadius: BorderRadius.circular(9),
                     border: Border.all(color: Colors.white, width: 1.5),
                   ),
                   child: const Center(
-                    child: Text('3', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                    child: Text(
+                      '3',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -164,7 +188,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Widget _buildPetPhotosSection() {
     return StreamBuilder<List<PetPhotoModel>>(
-      stream: _petPhotoService.getPhotosByDate(_selectedDate, petId: _selectedPetId),
+      stream: _petPhotoService.getPhotosByDate(
+        _selectedDate,
+        petId: _selectedPetId,
+      ),
       builder: (context, snapshot) {
         final photos = snapshot.data ?? [];
 
@@ -175,24 +202,37 @@ class _CalendarScreenState extends State<CalendarScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: [
-                  const Icon(Icons.photo_camera_rounded, color: _primary, size: 20),
+                  const Icon(
+                    Icons.photo_camera_rounded,
+                    color: _primary,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   const Expanded(
                     child: Text(
                       'Ảnh kỷ niệm',
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _textPrimary),
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: _textPrimary,
+                      ),
                     ),
                   ),
                   IconButton(
                     tooltip: 'Lưu ảnh kỷ niệm',
-                    onPressed: _isSavingPhoto ? null : _showPetPhotoSourceDialog,
+                    onPressed: _isSavingPhoto
+                        ? null
+                        : _showPetPhotoSourceDialog,
                     icon: _isSavingPhoto
                         ? const SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.add_a_photo_rounded, color: _primary),
+                        : const Icon(
+                            Icons.add_a_photo_rounded,
+                            color: _primary,
+                          ),
                   ),
                 ],
               ),
@@ -209,12 +249,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: _primary.withValues(alpha: 0.14)),
+                      border: Border.all(
+                        color: _primary.withValues(alpha: 0.14),
+                      ),
                     ),
                     child: const Center(
                       child: Text(
                         'Thêm ảnh kỷ niệm',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _textSecondary),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _textSecondary,
+                        ),
                       ),
                     ),
                   ),
@@ -227,7 +273,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   scrollDirection: Axis.horizontal,
                   itemCount: photos.length,
-                  itemBuilder: (context, index) => _buildPetPhotoItem(photos[index]),
+                  itemBuilder: (context, index) =>
+                      _buildPetPhotoItem(photos[index]),
                 ),
               ),
             const SizedBox(height: 24),
@@ -244,7 +291,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
+        ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
@@ -259,12 +308,35 @@ class _CalendarScreenState extends State<CalendarScreen> {
             fit: StackFit.expand,
             children: [
               Image(image: imageProvider, fit: BoxFit.cover),
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Material(
+                  color: Colors.black.withValues(alpha: 0.48),
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => _confirmDeletePetPhoto(photo),
+                    child: const Padding(
+                      padding: EdgeInsets.all(6),
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        color: Colors.white,
+                        size: 17,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               if (photo.title.isNotEmpty)
                 Align(
                   alignment: Alignment.bottomLeft,
                   child: Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                     color: Colors.black.withValues(alpha: 0.45),
                     child: Text(
                       photo.title,
@@ -288,7 +360,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void _showPetPhotoSourceDialog() {
     if (_selectedPetId == null || _selectedPetId!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng chọn thú cưng trước khi lưu ảnh')),
+        const SnackBar(
+          content: Text('Vui lòng chọn thú cưng trước khi lưu ảnh'),
+        ),
       );
       return;
     }
@@ -297,7 +371,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) => Padding(
         padding: EdgeInsets.fromLTRB(
           20,
@@ -309,44 +385,57 @@ class _CalendarScreenState extends State<CalendarScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Ảnh kỷ niệm',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _textPrimary),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: titleController,
-              textInputAction: TextInputAction.done,
-              decoration: InputDecoration(
-                hintText: 'Tiêu đề kỷ niệm',
-                filled: true,
-                fillColor: const Color(0xFFF5F8FF),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide.none,
+            children: [
+              const Text(
+                'Ảnh kỷ niệm',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: _textPrimary,
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               ),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: _primary),
-              title: const Text('Chụp ảnh'),
-              onTap: () {
-                Navigator.pop(context);
-                _savePetPhoto(ImageSource.camera, titleController.text.trim());
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library, color: _primary),
-              title: const Text('Chọn ảnh từ thư viện'),
-              onTap: () {
-                Navigator.pop(context);
-                _savePetPhoto(ImageSource.gallery, titleController.text.trim());
-              },
-            ),
-          ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: titleController,
+                textInputAction: TextInputAction.done,
+                decoration: InputDecoration(
+                  hintText: 'Tiêu đề kỷ niệm',
+                  filled: true,
+                  fillColor: const Color(0xFFF5F8FF),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: _primary),
+                title: const Text('Chụp ảnh'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _savePetPhoto(
+                    ImageSource.camera,
+                    titleController.text.trim(),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: _primary),
+                title: const Text('Chọn ảnh từ thư viện'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _savePetPhoto(
+                    ImageSource.gallery,
+                    titleController.text.trim(),
+                  );
+                },
+              ),
+            ],
           ),
         ),
       ),
@@ -358,17 +447,22 @@ class _CalendarScreenState extends State<CalendarScreen> {
     if (petId == null || petId.isEmpty) return;
 
     try {
-      final pickedFile = await _picker.pickImage(source: source, imageQuality: 75);
+      final pickedFile = await _picker.pickImage(
+        source: source,
+        imageQuality: 75,
+      );
       if (pickedFile == null) return;
 
       setState(() => _isSavingPhoto = true);
-      final imageUrl = await _uploadService.uploadToCloudinary(File(pickedFile.path));
+      final imageUrl = await _uploadService.uploadToCloudinary(
+        File(pickedFile.path),
+      );
       if (!mounted) return;
 
       if (imageUrl == null || imageUrl.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Không thể tải ảnh lên')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Không thể tải ảnh lên')));
         return;
       }
 
@@ -387,22 +481,61 @@ class _CalendarScreenState extends State<CalendarScreen> {
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã lưu ảnh kỷ niệm')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Đã lưu ảnh kỷ niệm')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Không thể lưu ảnh: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Không thể lưu ảnh: $e')));
     } finally {
       if (mounted) setState(() => _isSavingPhoto = false);
     }
   }
 
+  Future<void> _confirmDeletePetPhoto(PetPhotoModel photo) async {
+    final title = photo.title.trim().isEmpty ? 'ảnh này' : '"${photo.title}"';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xóa ảnh kỷ niệm?'),
+        content: Text('Bạn có chắc muốn xóa $title khỏi lịch thú cưng không?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xóa', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _petPhotoService.deletePetPhoto(photo.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Đã xóa ảnh kỷ niệm')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Không thể xóa ảnh: $e')));
+    }
+  }
+
   // ─── Task Section ──────────────────────────────────────────────────────────
 
-  Widget _buildTaskSection(List<ReminderModel> reminders, ConnectionState connectionState) {
+  Widget _buildTaskSection(
+    List<ReminderModel> reminders,
+    ConnectionState connectionState,
+  ) {
     if (connectionState == ConnectionState.waiting) {
       return const Center(
         child: Padding(
@@ -424,18 +557,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
             children: [
               const Text(
                 'Nhiệm vụ trong ngày',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _textPrimary),
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: _textPrimary,
+                ),
               ),
               if (reminders.isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: _primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     '$completed/${reminders.length} hoàn thành',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _primary),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: _primary,
+                    ),
                   ),
                 ),
             ],
@@ -453,7 +597,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 final reminder = reminders[i];
                 return TaskCard(
                   task: reminder,
-                  onToggle: (value) => _reminderService.toggleReminder(reminder.id, value),
+                  onToggle: (value) =>
+                      _reminderService.toggleReminder(reminder.id, value),
                   onDelete: () => _confirmDeleteReminder(reminder),
                 );
               },
@@ -470,17 +615,26 @@ class _CalendarScreenState extends State<CalendarScreen> {
         child: Column(
           children: [
             Container(
-              width: 80, height: 80,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
                 color: _primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(40),
               ),
-              child: const Icon(Icons.event_available_rounded, size: 40, color: _primary),
+              child: const Icon(
+                Icons.event_available_rounded,
+                size: 40,
+                color: _primary,
+              ),
             ),
             const SizedBox(height: 16),
             const Text(
               'Không có nhiệm vụ nào',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _textPrimary),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: _textPrimary,
+              ),
             ),
             const SizedBox(height: 8),
             const Text(
@@ -515,24 +669,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
         onSave: (data) async {
           if (data.repeatType == RepeatType.none) {
             await _reminderService.createReminder(
-              title:    data.title,
+              title: data.title,
               dateTime: data.dateTime,
-              type:     data.type,
-              petId:    data.petId,
-              petName:  data.petName,
+              type: data.type,
+              petId: data.petId,
+              petName: data.petName,
               petBreed: data.petBreed,
             );
           } else {
             await _reminderService.createRepeatingReminder(
-              title:         data.title,
+              title: data.title,
               startDateTime: data.dateTime,
-              type:          data.type,
-              petId:         data.petId,
-              petName:       data.petName,
-              petBreed:      data.petBreed,
-              repeatType:    data.repeatType,
-              repeatUntil:   data.repeatUntil!,
-              repeatDays:    data.repeatDays,
+              type: data.type,
+              petId: data.petId,
+              petName: data.petName,
+              petBreed: data.petBreed,
+              repeatType: data.repeatType,
+              repeatUntil: data.repeatUntil!,
+              repeatDays: data.repeatDays,
             );
           }
         },
@@ -545,7 +699,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Xóa nhiệm vụ?'),
-        content: Text('Bạn có chắc muốn xóa "${reminder.title}" khỏi lịch không?'),
+        content: Text(
+          'Bạn có chắc muốn xóa "${reminder.title}" khỏi lịch không?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -564,14 +720,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
     try {
       await _reminderService.deleteReminder(reminder.id);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã xóa nhiệm vụ')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Đã xóa nhiệm vụ')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Không thể xóa nhiệm vụ: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Không thể xóa nhiệm vụ: $e')));
     }
   }
 }

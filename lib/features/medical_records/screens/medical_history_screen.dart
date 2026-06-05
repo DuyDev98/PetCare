@@ -27,6 +27,7 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
       case 'Tiêm phòng':
         return Icons.vaccines_rounded;
       case 'Khám bệnh':
+      case 'Sổ y bạ':
         return Icons.medical_services_rounded;
       case 'Xét nghiệm':
         return Icons.biotech_rounded;
@@ -52,7 +53,9 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator(color: primaryColor));
+            return Center(
+              child: CircularProgressIndicator(color: primaryColor),
+            );
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -60,9 +63,16 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.assignment_late_outlined, size: 80, color: Colors.grey[300]),
+                  Icon(
+                    Icons.assignment_late_outlined,
+                    size: 80,
+                    color: Colors.grey[300],
+                  ),
                   const SizedBox(height: 16),
-                  const Text('Chưa có hồ sơ y tế nào.', style: TextStyle(color: Colors.grey)),
+                  const Text(
+                    'Chưa có hồ sơ y tế nào.',
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ],
               ),
             );
@@ -74,17 +84,19 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
             itemBuilder: (context, index) {
               final doc = snapshot.data!.docs[index];
               final data = doc.data() as Map<String, dynamic>;
-              
+
               final date = (data['date'] as Timestamp).toDate();
               final recordType = data['recordType'] ?? 'Khác';
 
               return Card(
                 elevation: 2,
                 margin: const EdgeInsets.only(bottom: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: ExpansionTile(
                   leading: CircleAvatar(
-                    backgroundColor: primaryColor.withOpacity(0.1),
+                    backgroundColor: primaryColor.withValues(alpha: 0.1),
                     child: Icon(_getIcon(recordType), color: primaryColor),
                   ),
                   title: Text(
@@ -102,10 +114,14 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Divider(),
-                          const Text('Ghi chú / Đơn thuốc:', style: TextStyle(fontWeight: FontWeight.bold)),
+                          const Text(
+                            'Ghi chú / Đơn thuốc:',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                           const SizedBox(height: 4),
                           Text(data['note'] ?? 'Không có ghi chú.'),
-                          if (data['imageUrl'] != null && data['imageUrl'].isNotEmpty) ...[
+                          if (data['imageUrl'] != null &&
+                              data['imageUrl'].isNotEmpty) ...[
                             const SizedBox(height: 12),
                             ClipRRect(
                               borderRadius: BorderRadius.circular(8),
@@ -114,20 +130,24 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
                                 height: 200,
                                 width: double.infinity,
                                 fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => const SizedBox(),
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const SizedBox(),
                               ),
                             ),
                           ],
                           Align(
                             alignment: Alignment.centerRight,
                             child: IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.redAccent,
+                              ),
                               onPressed: () => _confirmDelete(doc.id),
                             ),
-                          )
+                          ),
                         ],
                       ),
-                    )
+                    ),
                   ],
                 ),
               );
@@ -157,7 +177,10 @@ class _MedicalHistoryScreenState extends State<MedicalHistoryScreen> {
         title: const Text('Xác nhận xóa'),
         content: const Text('Bạn có chắc chắn muốn xóa hồ sơ này không?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Hủy'),
+          ),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);

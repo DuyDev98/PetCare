@@ -29,7 +29,7 @@ class ClinicHomePage extends StatefulWidget {
 }
 
 class _ClinicHomePageState extends State<ClinicHomePage> {
-  int _currentIndex = 3; // Mặc định chọn 'Khám bệnh' theo CustomBottomNavBar
+  int _currentIndex = 3; // Mặc định chọn 'Sổ y bạ' theo CustomBottomNavBar
 
   @override
   Widget build(BuildContext context) {
@@ -87,16 +87,17 @@ class _ClinicHomePageState extends State<ClinicHomePage> {
                   Text(
                     'An Nguyễn 👋',
                     style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold),
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
               Stack(
                 children: [
                   CircleAvatar(
-                    backgroundColor: Colors.white.withOpacity(0.2),
+                    backgroundColor: Colors.white.withValues(alpha: 0.2),
                     child: const Icon(Icons.notifications, color: Colors.white),
                   ),
                   Positioned(
@@ -113,14 +114,17 @@ class _ClinicHomePageState extends State<ClinicHomePage> {
                     ),
                   ),
                 ],
-              )
+              ),
             ],
           ),
           const SizedBox(height: 20),
           const Text(
             'Tìm phòng khám thú y',
             style: TextStyle(
-                color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 4),
           const Text(
@@ -136,7 +140,10 @@ class _ClinicHomePageState extends State<ClinicHomePage> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: const [
                 BoxShadow(
-                    color: Colors.black12, blurRadius: 10, offset: Offset(0, 5))
+                  color: Colors.black12,
+                  blurRadius: 10,
+                  offset: Offset(0, 5),
+                ),
               ],
             ),
             child: Row(
@@ -159,7 +166,7 @@ class _ClinicHomePageState extends State<ClinicHomePage> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(Icons.tune, color: Colors.white, size: 16),
-                )
+                ),
               ],
             ),
           ),
@@ -186,7 +193,10 @@ class _ClinicHomePageState extends State<ClinicHomePage> {
               color: isSelected ? const Color(0xFFF0A500) : Colors.white,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                  color: isSelected ? const Color(0xFFF0A500) : Colors.grey.shade300),
+                color: isSelected
+                    ? const Color(0xFFF0A500)
+                    : Colors.grey.shade300,
+              ),
             ),
             child: Center(
               child: Text(
@@ -207,7 +217,11 @@ class _ClinicHomePageState extends State<ClinicHomePage> {
   // 3. Dịch vụ nổi bật (Grid)
   Widget _buildFeaturedServices() {
     final services = [
-      {'title': 'Khám tổng quát', 'color': 0xFFDCFCE7, 'icon': Icons.medical_services},
+      {
+        'title': 'Khám tổng quát',
+        'color': 0xFFDCFCE7,
+        'icon': Icons.medical_services,
+      },
       {'title': 'Tiêm phòng', 'color': 0xFFDBEAFE, 'icon': Icons.vaccines},
       {'title': 'Phẫu thuật', 'color': 0xFFFCE7F3, 'icon': Icons.content_cut},
       {'title': 'Cấp cứu', 'color': 0xFFFEE2E2, 'icon': Icons.local_hospital},
@@ -216,16 +230,16 @@ class _ClinicHomePageState extends State<ClinicHomePage> {
     ];
 
     return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           const Text(
-          'Dịch vụ nổi bật',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        GridView.builder(
+            'Dịch vụ nổi bật',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          GridView.builder(
             padding: EdgeInsets.zero,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -238,44 +252,44 @@ class _ClinicHomePageState extends State<ClinicHomePage> {
             itemCount: services.length,
             itemBuilder: (context, index) {
               return Container(
-                  decoration: BoxDecoration(
-                    color: Color(services[index]['color'] as int),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                  Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                    child: Icon(
-                      services[index]['icon'] as IconData,
-                      color: Colors.black87,
-                      size: 24,
+                decoration: BoxDecoration(
+                  color: Color(services[index]['color'] as int),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        services[index]['icon'] as IconData,
+                        color: Colors.black87,
+                        size: 24,
+                      ),
                     ),
-                  ),
-                        const SizedBox(height: 8),
-                        Text(
-                          services[index]['title'] as String,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                  ),
+                    const SizedBox(height: 8),
+                    Text(
+                      services[index]['title'] as String,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               );
             },
-        ),
-          ],
-        ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -289,7 +303,8 @@ class _ClinicHomePageState extends State<ClinicHomePage> {
         'distance': '1.2 km',
         'rating': 4.8,
         'isOpen': true,
-        'image': 'https://images.unsplash.com/photo-1596272875729-41918a7c293a?auto=format&fit=crop&w=200&q=80'
+        'image':
+            'https://images.unsplash.com/photo-1596272875729-41918a7c293a?auto=format&fit=crop&w=200&q=80',
       },
       {
         'name': 'Bệnh viện Thú y Quốc tế',
@@ -297,7 +312,8 @@ class _ClinicHomePageState extends State<ClinicHomePage> {
         'distance': '2.5 km',
         'rating': 4.5,
         'isOpen': false,
-        'image': 'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?auto=format&fit=crop&w=200&q=80'
+        'image':
+            'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?auto=format&fit=crop&w=200&q=80',
       },
     ];
 
@@ -317,7 +333,10 @@ class _ClinicHomePageState extends State<ClinicHomePage> {
                 onPressed: () {},
                 child: const Text(
                   'Xem tất cả',
-                  style: TextStyle(color: Color(0xFFC97A00), fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Color(0xFFC97A00),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -381,7 +400,7 @@ class ClinicCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -429,7 +448,10 @@ class ClinicCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFFEF3C7),
                         borderRadius: BorderRadius.circular(8),
@@ -437,7 +459,11 @@ class ClinicCard extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
+                          const Icon(
+                            Icons.star_rounded,
+                            color: Color(0xFFF59E0B),
+                            size: 14,
+                          ),
                           const SizedBox(width: 2),
                           Text(
                             rating.toString(),
@@ -465,15 +491,22 @@ class ClinicCard extends StatelessWidget {
                   children: [
                     // Status Badge (Đang mở / Đóng cửa)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: isOpen ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+                        color: isOpen
+                            ? const Color(0xFFDCFCE7)
+                            : const Color(0xFFFEE2E2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
                         isOpen ? 'Đang mở' : 'Đóng cửa',
                         style: TextStyle(
-                          color: isOpen ? const Color(0xFF15803D) : const Color(0xFFB91C1C),
+                          color: isOpen
+                              ? const Color(0xFF15803D)
+                              : const Color(0xFFB91C1C),
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
@@ -482,7 +515,11 @@ class ClinicCard extends StatelessWidget {
                     // Khoảng cách
                     Row(
                       children: [
-                        Icon(Icons.location_on_rounded, color: Colors.grey.shade400, size: 14),
+                        Icon(
+                          Icons.location_on_rounded,
+                          color: Colors.grey.shade400,
+                          size: 14,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           distance,

@@ -46,7 +46,7 @@ extension TaskTypeExtension on TaskType {
       case TaskType.feed:
         return 'Cho ăn';
       case TaskType.checkup:
-        return 'Khám bệnh';
+        return 'Sổ y bạ';
       case TaskType.walk:
         return 'Đi dạo';
       case TaskType.other:
