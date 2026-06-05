@@ -41,4 +41,20 @@ class PetPhotoService {
         .where((photo) => petId == null || petId.isEmpty || photo.petId == petId)
         .toList());
   }
+
+  /// Lấy stream tất cả ảnh của user hiện tại (Sắp xếp mới nhất lên đầu)
+  Stream<List<PetPhotoModel>> getUserPhotosStream() {
+    return _db
+        .where('userId', isEqualTo: _uid)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => PetPhotoModel.fromMap(d.data() as Map<String, dynamic>, d.id))
+            .toList());
+  }
+
+  /// Xóa document ảnh trên Firestore
+  Future<void> deletePetPhoto(String docId) async {
+    await _db.doc(docId).delete();
+  }
 }

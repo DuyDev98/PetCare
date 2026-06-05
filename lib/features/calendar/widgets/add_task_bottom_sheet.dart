@@ -262,8 +262,6 @@ class _AddTaskBottomSheetState extends State<AddTaskBottomSheet> {
             const SizedBox(height: 16),
 
             // ── Ảnh ───────────────────────────────────────
-            _buildLabel('Ảnh minh họa (tùy chọn)'),
-            const SizedBox(height: 8),
             _buildImagePicker(),
             const SizedBox(height: 16),
 

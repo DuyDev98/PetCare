@@ -1,11 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:pet_care/data/services/firebase_service.dart' as fs;
+import 'package:pet_care/data/services/firebase_service.dart';
 import 'package:pet_care/data/services/local_notification_service.dart';
-import 'package:pet_care/data/services/push_notification_service.dart';
 import 'package:pet_care/features/auth/screens/login_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pet_care/data/services/pet_service.dart';
@@ -23,15 +22,30 @@ void main() async {
   await dotenv.load(fileName: ".env");
   await Firebase.initializeApp();
 
-  // Khởi tạo Local Notification
+  // Initialize Notification Services
   final localNotificationService = LocalNotificationService();
   await localNotificationService.init();
   await localNotificationService.requestPermissions();
 
-  // Khởi tạo Push Notification (FCM)
-  final pushNotificationService = PushNotificationService();
-  await pushNotificationService.initFCM();
+  // Initialize FCM
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  // Get token and save
+  final fcmToken = await FirebaseMessaging.instance.getToken();
+  if (fcmToken != null) {
+    await FirebaseService().saveFcmToken(fcmToken);
+  }
+
+  // Foreground message handling
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    if (message.notification != null) {
+      localNotificationService.showNotification(
+        id: message.hashCode,
+        title: message.notification!.title ?? '',
+        body: message.notification!.body ?? '',
+      );
+    }
+  });
 
   runApp(const MyApp());
 }
@@ -71,7 +85,7 @@ class AuthWrapper extends StatelessWidget {
           return const LoginScreen();
         }
 
-        // 2. Nếu đã đăng nhập -> Kiểm tra xem đã tạo thú cưng chưa (Bỏ qua chọn vai trò)
+        // 2. Nếu đã đăng nhập -> Kiểm tra xem đã tạo thú cưng chưa 
         return FutureBuilder<bool>(
           future: PetService().checkUserProfileExists(),
           builder: (context, petSnapshot) {

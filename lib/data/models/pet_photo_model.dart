@@ -8,6 +8,7 @@ class PetPhotoModel {
   final String title;
   final String imageUrl;
   final DateTime timestamp;
+  final DateTime? createdAt;
 
   const PetPhotoModel({
     required this.id,
@@ -17,6 +18,7 @@ class PetPhotoModel {
     required this.title,
     required this.imageUrl,
     required this.timestamp,
+    this.createdAt,
   });
 
   factory PetPhotoModel.fromMap(Map<String, dynamic> map, String docId) {
@@ -28,6 +30,7 @@ class PetPhotoModel {
       title: map['title'] ?? '',
       imageUrl: map['imageUrl'] ?? '',
       timestamp: (map['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
     );
   }
 }

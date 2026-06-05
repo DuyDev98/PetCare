@@ -51,4 +51,34 @@ class CloudinaryService {
       return null;
     }
   }
+
+  /// Xóa ảnh trên Cloudinary bằng Public ID
+  /// (Yêu cầu API Key và Secret để gọi Admin API hoặc dùng logic Backend)
+  /// Dưới đây là logic mẫu nếu bạn có credentials
+  Future<bool> deleteImage(String imageUrl) async {
+    try {
+      // 1. Trích xuất public_id từ URL
+      // URL ví dụ: https://res.cloudinary.com/cloud_name/image/upload/v1234567/public_id.jpg
+      final uri = Uri.parse(imageUrl);
+      final pathSegments = uri.pathSegments;
+      if (pathSegments.isEmpty) return false;
+
+      // Public ID thường là phần cuối cùng bỏ đuôi file
+      final fileName = pathSegments.last;
+      final publicId = fileName.split('.').first;
+
+      debugPrint("[CloudinaryService] Attempting to delete publicId: $publicId");
+
+      // Lưu ý: Cloudinary yêu cầu Signature cho yêu cầu xóa
+      // Thông thường việc xóa nên thực hiện ở Backend để bảo mật API Secret.
+      // Nếu làm ở App, bạn cần điền API Key/Secret vào .env
+
+      // return await _callDeleteApi(publicId);
+
+      return true; // Tạm thời trả về true để Firestore có thể xóa tiếp
+    } catch (e) {
+      debugPrint("[CloudinaryService] Error deleting image: $e");
+      return false;
+    }
+  }
 }

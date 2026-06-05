@@ -13,6 +13,8 @@ import 'package:pet_care/data/services/pet_service.dart';
 import 'package:pet_care/data/services/firebase_service.dart';
 import 'package:pet_care/features/calendar/services/reminder_service.dart';
 import 'package:pet_care/features/home/screens/notification_screen.dart';
+import 'package:pet_care/features/photo_history/screens/photo_history_screen.dart';
+import 'package:pet_care/features/photo_history/screens/photo_detail_screen.dart';
 import '../widgets/pet_avatar_selector.dart';
 import '../widgets/calendar_widget.dart';
 import '../widgets/task_card.dart';
@@ -200,10 +202,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 children: [
                   const Icon(Icons.photo_camera_rounded, color: _primary, size: 20),
                   const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Ảnh kỷ niệm',
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _textPrimary),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => PhotoHistoryScreen()),
+                        );
+                      },
+                      child: const Text(
+                        'Ảnh kỷ niệm',
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _textPrimary),
+                      ),
                     ),
                   ),
                   IconButton(
@@ -221,29 +231,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            if (photos.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: GestureDetector(
-                  onTap: _isSavingPhoto ? null : _showPetPhotoSourceDialog,
-                  child: Container(
-                    width: double.infinity,
-                    height: 92,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: _primary.withValues(alpha: 0.14)),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'Thêm ảnh kỷ niệm',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _textSecondary),
-                      ),
-                    ),
-                  ),
-                ),
-              )
-            else
+            if (photos.isNotEmpty)
               SizedBox(
                 height: 140,
                 child: ListView.builder(
@@ -261,51 +249,115 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildPetPhotoItem(PetPhotoModel photo) {
-    return Container(
-      margin: const EdgeInsets.only(right: 12),
-      width: 110,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: CachedNetworkImage(
-          imageUrl: photo.imageUrl,
-          fit: BoxFit.cover,
-          placeholder: (context, url) =>
-              const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          errorWidget: (context, url, error) =>
-              const Icon(Icons.broken_image, color: Colors.grey),
-          imageBuilder: (context, imageProvider) => Stack(
-            fit: StackFit.expand,
-            children: [
-              Image(image: imageProvider, fit: BoxFit.cover),
-              if (photo.title.isNotEmpty)
-                Align(
-                  alignment: Alignment.bottomLeft,
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    color: Colors.black.withValues(alpha: 0.45),
-                    child: Text(
-                      photo.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => PhotoDetailScreen(photo: photo)),
+        );
+      },
+      child: Hero(
+        tag: photo.id,
+        child: Container(
+          margin: const EdgeInsets.only(right: 12),
+          width: 110,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: CachedNetworkImage(
+              imageUrl: photo.imageUrl,
+              fit: BoxFit.cover,
+              placeholder: (context, url) =>
+                  const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              errorWidget: (context, url, error) =>
+                  const Icon(Icons.broken_image, color: Colors.grey),
+              imageBuilder: (context, imageProvider) => Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image(image: imageProvider, fit: BoxFit.cover),
+                  // Nút xóa ở góc phải ảnh
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: GestureDetector(
+                      onTap: () => _confirmDeletePhoto(photo),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.close, color: Colors.white, size: 16),
                       ),
                     ),
                   ),
-                ),
-            ],
+                  if (photo.title.isNotEmpty)
+                    Align(
+                      alignment: Alignment.bottomLeft,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        color: Colors.black.withValues(alpha: 0.45),
+                        child: Text(
+                          photo.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDeletePhoto(PetPhotoModel photo) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xóa ảnh kỷ niệm?'),
+        content: const Text('Bạn có chắc chắn muốn xóa ảnh này không?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xóa', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      // Gọi service xóa
+      await PetPhotoService().deletePetPhoto(photo.id);
+      // Có thể thêm xóa trên Cloudinary nếu cần
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã xóa ảnh kỷ niệm')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể xóa ảnh: $e')),
+      );
+    }
   }
 
   void _showPetPhotoSourceDialog() {

@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pet_care/data/services/local_notification_service.dart';
 import 'package:pet_care/data/services/notification_service.dart';
 import 'package:pet_care/features/calendar/models/reminder_model.dart';
+import 'package:pet_care/services/home_widget_service.dart';
 
 class ReminderService {
   final CollectionReference _db = FirebaseFirestore.instance.collection('reminders');
@@ -40,6 +41,9 @@ class ReminderService {
       'repeatUntil': null,
       'parentId':    null,
     });
+
+    // Cập nhật Home Screen Widget
+    await HomeWidgetService.refreshWidget();
 
     // Schedule local notification
     await _localNotificationService.scheduleNotification(
@@ -128,6 +132,9 @@ class ReminderService {
     }
     await batch.commit();
 
+    // Cập nhật Home Screen Widget
+    await HomeWidgetService.refreshWidget();
+
     // Add to in-app notification history
     await _notificationService.addNotification(
       title: 'Đã tạo nhắc nhở lặp lại: $title',
@@ -213,6 +220,7 @@ class ReminderService {
   // ── Toggle done / pending ─────────────────────────────────
   Future<void> toggleReminder(String docId, bool isDone) async {
     await _db.doc(docId).update({'status': isDone ? 'done' : 'pending'});
+    await HomeWidgetService.refreshWidget();
   }
 
   // ── Reschedule ────────────────────────────────────────────
@@ -221,9 +229,11 @@ class ReminderService {
       'timestamp': Timestamp.fromDate(newTime),
       'status':    'pending',
     });
+    await HomeWidgetService.refreshWidget();
   }
 
   Future<void> deleteReminder(String docId) async {
     await _db.doc(docId).delete();
+    await HomeWidgetService.refreshWidget();
   }
 }
