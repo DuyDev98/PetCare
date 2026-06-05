@@ -68,7 +68,7 @@ class CustomBottomNavBar extends StatelessWidget {
                 padding: EdgeInsets.only(bottom: 4),
                 child: Icon(Icons.local_hospital_outlined, size: 28),
               ),
-              label: 'Khám bệnh',
+              label: 'Sổ y bạ',
             ),
             BottomNavigationBarItem(
               icon: Padding(

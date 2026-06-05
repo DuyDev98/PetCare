@@ -49,7 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
-      print("Lỗi loadData HomeScreen: $e");
+      debugPrint("Lỗi loadData HomeScreen: $e");
     }
   }
 
@@ -64,7 +64,9 @@ class _HomeScreenState extends State<HomeScreen> {
     // Danh sách các màn hình tương ứng với Bottom Nav Bar
     final List<Widget> pages = [
       _buildHomeContent(),
-      const Scaffold(body: Center(child: Text('Dịch vụ'))), // Tạm thời thay cho PetMartScreen
+      const Scaffold(
+        body: Center(child: Text('Dịch vụ')),
+      ), // Tạm thời thay cho PetMartScreen
       const CalendarScreen(),
       const SoYBaScreen(showBottomNav: false),
       const CommunityScreen(),
@@ -72,16 +74,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (_isLoading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
       );
     }
 
     return Scaffold(
       backgroundColor: const Color(0xFFFAF8F5),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: pages,
-      ),
+      body: IndexedStack(index: _currentIndex, children: pages),
       bottomNavigationBar: CustomBottomNavBar(
         currentIndex: _currentIndex,
         onTap: _onTabTapped,
@@ -113,7 +114,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 20,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -149,12 +153,19 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.all(2),
-                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
                 child: CircleAvatar(
                   radius: 24,
                   backgroundColor: AppColors.secondary,
-                  backgroundImage: photoUrl.isNotEmpty ? CachedNetworkImageProvider(photoUrl) : null,
-                  child: photoUrl.isEmpty ? const Icon(Icons.person, color: Colors.white) : null,
+                  backgroundImage: photoUrl.isNotEmpty
+                      ? CachedNetworkImageProvider(photoUrl)
+                      : null,
+                  child: photoUrl.isEmpty
+                      ? const Icon(Icons.person, color: Colors.white)
+                      : null,
                 ),
               ),
               const SizedBox(width: 12),
@@ -162,10 +173,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Chào,', style: TextStyle(color: Color(0xFF6B7280), fontSize: 13)),
+                    const Text(
+                      'Chào,',
+                      style: TextStyle(color: Color(0xFF6B7280), fontSize: 13),
+                    ),
                     Text(
                       '$name!',
-                      style: const TextStyle(color: Color(0xFF1F2937), fontSize: 18, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: Color(0xFF1F2937),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
@@ -186,12 +204,20 @@ class _HomeScreenState extends State<HomeScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 10,
+              ),
+            ],
           ),
           child: IconButton(
             icon: const Icon(Icons.settings_outlined, color: Color(0xFF1F2937)),
             onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
             },
           ),
         ),
@@ -207,7 +233,7 @@ class _HomeScreenState extends State<HomeScreen> {
               border: Border.all(color: Colors.white, width: 2),
             ),
           ),
-        )
+        ),
       ],
     );
   }
@@ -218,14 +244,21 @@ class _HomeScreenState extends State<HomeScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Thú cưng của tôi', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1F2937))),
+            const Text(
+              'Thú cưng của tôi',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1F2937),
+              ),
+            ),
             Row(
               children: [
                 _buildSmallCircleButton(Icons.chevron_left),
                 const SizedBox(width: 8),
                 _buildSmallCircleButton(Icons.chevron_right),
               ],
-            )
+            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -245,7 +278,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     name: pet['name'] ?? 'Pet',
                     breed: pet['type'] ?? 'Unknown',
                     age: '${pet['age'] ?? '0'} tuổi',
-                    imageUrl: pet['avatarUrl'] ?? '', 
+                    imageUrl: pet['avatarUrl'] ?? '',
                     isGradient: index % 2 == 0,
                   ),
                 );
@@ -259,15 +292,34 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildPetCard({required double width, required String name, required String breed, required String age, required String imageUrl, required bool isGradient}) {
+  Widget _buildPetCard({
+    required double width,
+    required String name,
+    required String breed,
+    required String age,
+    required String imageUrl,
+    required bool isGradient,
+  }) {
     return Container(
       width: width,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isGradient ? null : Colors.white,
-        gradient: isGradient ? const LinearGradient(colors: [Color(0xFFF4A261), Color(0xFFE8834A)], begin: Alignment.topLeft, end: Alignment.bottomRight) : null,
+        gradient: isGradient
+            ? const LinearGradient(
+                colors: [Color(0xFFF4A261), Color(0xFFE8834A)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : null,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -277,33 +329,47 @@ class _HomeScreenState extends State<HomeScreen> {
             backgroundColor: Colors.white,
             child: ClipOval(
               child: imageUrl.isNotEmpty
-                ? CachedNetworkImage(
-                    imageUrl: imageUrl,
-                    width: 60,
-                    height: 60,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
-                    errorWidget: (context, url, error) => const Icon(Icons.pets, color: Colors.grey),
-                  )
-                : const Icon(Icons.pets, size: 30, color: Colors.grey),
+                  ? CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) =>
+                          const CircularProgressIndicator(strokeWidth: 2),
+                      errorWidget: (context, url, error) =>
+                          const Icon(Icons.pets, color: Colors.grey),
+                    )
+                  : const Icon(Icons.pets, size: 30, color: Colors.grey),
             ),
           ),
           const SizedBox(height: 12),
           Text(
             name,
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: isGradient ? Colors.white : const Color(0xFF374151)),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: isGradient ? Colors.white : const Color(0xFF374151),
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 4),
           Text(
             breed,
-            style: TextStyle(fontSize: 12, color: isGradient ? Colors.white70 : Colors.black54),
+            style: TextStyle(
+              fontSize: 12,
+              color: isGradient ? Colors.white70 : Colors.black54,
+            ),
             maxLines: 1,
           ),
           Text(
             age,
-            style: TextStyle(fontSize: 11, color: isGradient ? Colors.white.withValues(alpha: 0.7) : Colors.black45),
+            style: TextStyle(
+              fontSize: 11,
+              color: isGradient
+                  ? Colors.white.withValues(alpha: 0.7)
+                  : Colors.black45,
+            ),
           ),
         ],
       ),
@@ -313,26 +379,43 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildAddPetCard(double width) {
     return GestureDetector(
       onTap: () async {
-        await Navigator.push(context, MaterialPageRoute(builder: (context) => const SetupProfileScreen()));
-        _loadData(); 
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SetupProfileScreen()),
+        );
+        _loadData();
       },
       child: Container(
         width: width,
         decoration: BoxDecoration(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.primary, width: 1.5, style: BorderStyle.solid),
+          border: Border.all(
+            color: AppColors.primary,
+            width: 1.5,
+            style: BorderStyle.solid,
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
               child: const Icon(Icons.add, color: AppColors.primary, size: 24),
             ),
             const SizedBox(height: 8),
-            const Text('Thêm mới', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
+            const Text(
+              'Thêm mới',
+              style: TextStyle(
+                color: AppColors.primary,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
       ),
@@ -343,42 +426,79 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Lịch chăm sóc & Nhắc nhở', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1F2937))),
+        const Text(
+          'Lịch chăm sóc & Nhắc nhở',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1F2937),
+          ),
+        ),
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(24),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Nhiệm vụ hôm nay', style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 12)),
+              const Text(
+                'Nhiệm vụ hôm nay',
+                style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 12),
+              ),
               const SizedBox(height: 16),
-              _buildTaskItem(time: '8:00 AM', desc: 'Cho thú cưng ăn', icon: '🍖', isDone: true),
-              _buildTaskItem(time: '10:30 AM', desc: 'Tắm rửa', icon: '🛁', isDone: false),
+              _buildTaskItem(
+                time: '8:00 AM',
+                desc: 'Cho thú cưng ăn',
+                icon: '🍖',
+                isDone: true,
+              ),
+              _buildTaskItem(
+                time: '10:30 AM',
+                desc: 'Tắm rửa',
+                icon: '🛁',
+                isDone: false,
+              ),
             ],
           ),
-        )
+        ),
       ],
     );
   }
 
-  Widget _buildTaskItem({required String time, required String desc, required String icon, required bool isDone}) {
+  Widget _buildTaskItem({
+    required String time,
+    required String desc,
+    required String icon,
+    required bool isDone,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          Icon(isDone ? Icons.check_circle : Icons.radio_button_unchecked, color: isDone ? const Color(0xFF6BBFA3) : Colors.grey.shade300, size: 22),
+          Icon(
+            isDone ? Icons.check_circle : Icons.radio_button_unchecked,
+            color: isDone ? const Color(0xFF6BBFA3) : Colors.grey.shade300,
+            size: 22,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               '$time: $desc',
               style: TextStyle(
                 fontSize: 13,
-                color: isDone ? const Color(0xFF9CA3AF) : const Color(0xFF374151),
+                color: isDone
+                    ? const Color(0xFF9CA3AF)
+                    : const Color(0xFF374151),
                 decoration: isDone ? TextDecoration.lineThrough : null,
               ),
               overflow: TextOverflow.ellipsis,
@@ -397,33 +517,39 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _buildQuickActionButton(
-            icon: Icons.calendar_month, 
-            label: 'Lịch', 
-            bgColor: const Color(0xFFFFF1E6), 
+            icon: Icons.calendar_month,
+            label: 'Lịch',
+            bgColor: const Color(0xFFFFF1E6),
             iconColor: const Color(0xFFF4A261),
             onTap: () {
               setState(() => _currentIndex = 2); // Chuyển sang Tab Lịch
             },
           ),
           _buildQuickActionButton(
-            icon: Icons.medical_services_outlined, 
-            label: 'Y tế', 
-            bgColor: AppColors.primary, 
+            icon: Icons.medical_services_outlined,
+            label: 'Sổ y bạ',
+            bgColor: AppColors.primary,
             iconColor: Colors.white,
             onTap: () {
-              setState(() => _currentIndex = 3); // Chuyển sang Tab Khám bệnh
+              setState(() => _currentIndex = 3); // Chuyển sang Tab Sổ y bạ
             },
           ),
           _buildQuickActionButton(
-            icon: Icons.shopping_bag_outlined, 
-            label: 'Shop', 
-            bgColor: const Color(0xFF4CAF82), 
+            icon: Icons.shopping_bag_outlined,
+            label: 'Shop',
+            bgColor: const Color(0xFF4CAF82),
             iconColor: Colors.white,
             onTap: () {
               setState(() => _currentIndex = 1);
@@ -432,8 +558,8 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildQuickActionButton(
             icon: Icons.volunteer_activism_outlined,
             label: 'Cứu trợ',
-            bgColor: const Color(0xFF5B9BD5), 
-            iconColor: Colors.white, 
+            bgColor: const Color(0xFF5B9BD5),
+            iconColor: Colors.white,
             badgeCount: 3,
             onTap: () {
               setState(() => _currentIndex = 4);
@@ -445,10 +571,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildQuickActionButton({
-    required IconData icon, 
-    required String label, 
-    required Color bgColor, 
-    required Color iconColor, 
+    required IconData icon,
+    required String label,
+    required Color bgColor,
+    required Color iconColor,
     int badgeCount = 0,
     VoidCallback? onTap,
   }) {
@@ -462,7 +588,10 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Container(
                   padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(16)),
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   child: Icon(icon, color: iconColor, size: 24),
                 ),
                 if (badgeCount > 0)
@@ -471,14 +600,31 @@ class _HomeScreenState extends State<HomeScreen> {
                     right: -4,
                     child: Container(
                       padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(color: Color(0xFFEF4444), shape: BoxShape.circle),
-                      child: Text('$badgeCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFEF4444),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '$badgeCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                  )
+                  ),
               ],
             ),
             const SizedBox(height: 8),
-            Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF374151), fontWeight: FontWeight.w500))
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11,
+                color: Color(0xFF374151),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
       ),
@@ -489,7 +635,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Ghi chú mới nhất', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1F2937))),
+        const Text(
+          'Ghi chú mới nhất',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1F2937),
+          ),
+        ),
         const SizedBox(height: 16),
         Row(
           children: [
@@ -498,39 +651,79 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: Row(
                 children: [
-                  Expanded(child: _buildNoteCard(screenWidth, 'Luna', 'Khám định kỳ', 'assets/images/dog.png')),
+                  Expanded(
+                    child: _buildNoteCard(
+                      screenWidth,
+                      'Luna',
+                      'Khám định kỳ',
+                      'assets/images/dog.png',
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildNoteCard(screenWidth, 'Milo', 'Tắm rửa', 'assets/images/cat.png')),
+                  Expanded(
+                    child: _buildNoteCard(
+                      screenWidth,
+                      'Milo',
+                      'Tắm rửa',
+                      'assets/images/cat.png',
+                    ),
+                  ),
                 ],
               ),
             ),
             const SizedBox(width: 12),
             _buildNavArrow(Icons.chevron_right),
           ],
-        )
+        ),
       ],
     );
   }
 
-  Widget _buildNoteCard(double screenWidth, String name, String note, String imgPath) {
+  Widget _buildNoteCard(
+    double screenWidth,
+    String name,
+    String note,
+    String imgPath,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(15),
-            child: Image.asset(imgPath, height: 80, width: double.infinity, fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(height: 80, color: Colors.grey[200])),
+            child: Image.asset(
+              imgPath,
+              height: 80,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              errorBuilder: (c, e, s) =>
+                  Container(height: 80, color: Colors.grey[200]),
+            ),
           ),
           const SizedBox(height: 10),
-          Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          Text(
+            name,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
           const SizedBox(height: 4),
-          Text(note, style: const TextStyle(fontSize: 11, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text(
+            note,
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );
@@ -539,7 +732,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildNavArrow(IconData icon) {
     return Container(
       padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey[200]!)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
       child: Icon(icon, size: 20, color: Colors.grey),
     );
   }
@@ -547,7 +744,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildSmallCircleButton(IconData icon) {
     return Container(
       padding: const EdgeInsets.all(4),
-      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+      ),
       child: Icon(icon, size: 20, color: Colors.black54),
     );
   }
