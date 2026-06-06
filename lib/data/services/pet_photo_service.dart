@@ -42,11 +42,23 @@ class PetPhotoService {
         .toList());
   }
 
-  /// Lấy stream tất cả ảnh của user hiện tại (Sắp xếp mới nhất lên đầu)
+  /// Lấy stream tất cả ảnh của user hiện tại (Dùng timestamp để ổn định hơn createdAt)
   Stream<List<PetPhotoModel>> getUserPhotosStream() {
     return _db
         .where('userId', isEqualTo: _uid)
-        .orderBy('createdAt', descending: true)
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => PetPhotoModel.fromMap(d.data() as Map<String, dynamic>, d.id))
+            .toList());
+  }
+
+  /// Lấy stream ảnh của riêng một thú cưng
+  Stream<List<PetPhotoModel>> getPhotosByPet(String petId) {
+    return _db
+        .where('userId', isEqualTo: _uid)
+        .where('petId', isEqualTo: petId)
+        .orderBy('timestamp', descending: true)
         .snapshots()
         .map((snap) => snap.docs
             .map((d) => PetPhotoModel.fromMap(d.data() as Map<String, dynamic>, d.id))
