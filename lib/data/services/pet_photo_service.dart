@@ -78,9 +78,4 @@ class PetPhotoService {
             .map((d) => PetPhotoModel.fromMap(d.data() as Map<String, dynamic>, d.id))
             .toList());
   }
-
-  /// Xóa document ảnh trên Firestore
-  Future<void> deletePetPhoto(String docId) async {
-    await _db.doc(docId).delete();
-  }
 }

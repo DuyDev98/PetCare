@@ -51,6 +51,7 @@ class LostPetService {
     return _col.doc(id).update({'status': val});
   }
 
+  /// Cập nhật thông tin bài đăng
   static Future<void> updatePost(
     String id, {
     required String name,
@@ -82,6 +83,7 @@ class LostPetService {
     });
   }
 
+  /// Đóng/Mở bài đăng
   static Future<void> setClosed(String id, bool isClosed) {
     return _col.doc(id).update({
       'isClosed': isClosed,
@@ -89,6 +91,7 @@ class LostPetService {
     });
   }
 
+  /// Báo cáo bài đăng
   static Future<void> reportPost({
     required LostPetPost post,
     required String reason,
