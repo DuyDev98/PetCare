@@ -3,8 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/pet_photo_model.dart';
 
 class PetPhotoService {
-  final CollectionReference _db =
-      FirebaseFirestore.instance.collection('pet_photos');
+  final CollectionReference _db = FirebaseFirestore.instance.collection(
+    'pet_photos',
+  );
 
   String get _uid => FirebaseAuth.instance.currentUser?.uid ?? '';
 
@@ -36,10 +37,23 @@ class PetPhotoService {
         .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(end))
         .orderBy('timestamp', descending: true);
 
-    return query.snapshots().map((snap) => snap.docs
-        .map((d) => PetPhotoModel.fromMap(d.data() as Map<String, dynamic>, d.id))
-        .where((photo) => petId == null || petId.isEmpty || photo.petId == petId)
-        .toList());
+    return query.snapshots().map(
+      (snap) => snap.docs
+          .map(
+            (d) =>
+                PetPhotoModel.fromMap(d.data() as Map<String, dynamic>, d.id),
+          )
+          .where(
+            (photo) => petId == null || petId.isEmpty || photo.petId == petId,
+          )
+          .toList(),
+    );
+  }
+
+  Future<void> deletePetPhoto(String photoId) async {
+    if (photoId.isEmpty) return;
+
+    await _db.doc(photoId).delete();
   }
 
   /// Lấy stream tất cả ảnh của user hiện tại (Dùng timestamp để ổn định hơn createdAt)
