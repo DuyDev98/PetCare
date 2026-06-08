@@ -10,10 +10,12 @@ import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../models/lost_pet_model.dart';
 import '../services/lost_pet_service.dart';
 import 'package:pet_care/data/services/local_notification_service.dart';
+import 'package:pet_care/services/location_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN SCREEN
@@ -1544,6 +1546,9 @@ class _EditPostSheetState extends State<_EditPostSheet> {
   late bool _isUrgent;
   bool _isSaving = false;
 
+  final FocusNode _locFocusNode = FocusNode();
+  bool _isLocAutoFilled = false;
+
   static const _orange = Color(0xFFE07B2B);
 
   @override
@@ -1564,6 +1569,9 @@ class _EditPostSheetState extends State<_EditPostSheet> {
     );
     _status = post.status;
     _isUrgent = post.isUrgent;
+
+    // FIX: Lắng nghe sự kiện focus (chỉ khai báo 1 lần initState)
+    _locFocusNode.addListener(_handleLocFocusChange);
   }
 
   @override
@@ -1575,7 +1583,29 @@ class _EditPostSheetState extends State<_EditPostSheet> {
     _phoneCtrl.dispose();
     _locCtrl.dispose();
     _otherKindCtrl.dispose();
+    // FIX: Giải phóng bộ nhớ
+    _locFocusNode.removeListener(_handleLocFocusChange);
+    _locFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Tự động lấy vị trí khi focus vào trường nhập lần đầu
+  Future<void> _handleLocFocusChange() async {
+    if (_locFocusNode.hasFocus && !_isLocAutoFilled) {
+      // Đánh dấu đã tự động điền để không lặp lại
+      _isLocAutoFilled = true;
+
+      try {
+        final position = await LocationService().getCurrentPosition();
+        // Điền tọa độ vào ô nhập liệu (Người dùng vẫn có thể xóa/sửa)
+        if (mounted) {
+          _locCtrl.text = '${position.latitude}, ${position.longitude}';
+        }
+      } catch (e) {
+        // Bỏ qua nếu lỗi (ví dụ người dùng từ chối quyền)
+        debugPrint('Lỗi tự động lấy vị trí: $e');
+      }
+    }
   }
 
   Future<void> _save() async {
@@ -2109,6 +2139,10 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
   final _locCtrl = TextEditingController();
   final _otherKindCtrl = TextEditingController();
 
+  // THÊM: FocusNode cho trường nhập Vị trí
+  final FocusNode _locFocusNode = FocusNode();
+  bool _isLocAutoFilled = false; // Đánh dấu đã tự động điền hay chưa
+
   String _kind = 'Chó';
   LostPetStatus _postStatus = LostPetStatus.lost;
   bool _isUrgent = false;
@@ -2116,6 +2150,13 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
   XFile? _pickedImage;
 
   static const _orange = Color(0xFFE07B2B);
+
+  @override
+  void initState() {
+    super.initState();
+    // THÊM: Lắng nghe sự kiện focus để tự động điền vị trí
+    _locFocusNode.addListener(_handleLocFocusChange);
+  }
 
   @override
   void dispose() {
@@ -2126,7 +2167,28 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
     _phoneCtrl.dispose();
     _locCtrl.dispose();
     _otherKindCtrl.dispose();
+    _locFocusNode.removeListener(_handleLocFocusChange);
+    _locFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Tự động lấy vị trí khi focus vào trường nhập lần đầu
+  Future<void> _handleLocFocusChange() async {
+    if (_locFocusNode.hasFocus && !_isLocAutoFilled) {
+      // Đánh dấu đã tự động điền để không lặp lại
+      _isLocAutoFilled = true;
+
+      try {
+        final position = await LocationService().getCurrentPosition();
+        // Điền tọa độ vào ô nhập liệu (Người dùng vẫn có thể xóa/sửa)
+        if (mounted) {
+          _locCtrl.text = '${position.latitude}, ${position.longitude}';
+        }
+      } catch (e) {
+        // Bỏ qua nếu lỗi (ví dụ người dùng từ chối quyền)
+        debugPrint('Lỗi tự động lấy vị trí: $e');
+      }
+    }
   }
 
   Future<String> _uploadToCloudinary(File file) async {
@@ -2345,7 +2407,11 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
-                  _field(_locCtrl, 'VD: 55 Giải Phóng, Hà Nội'),
+                  _field(
+                    _locCtrl,
+                    'VD: 55 Giải Phóng, Hà Nội',
+                    focusNode: _locFocusNode, // Gán FocusNode
+                  ),
                   const SizedBox(height: 18),
                   const Text(
                     'Ảnh thú cưng',
@@ -2702,6 +2768,7 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
     bool required = false,
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
+    FocusNode? focusNode, // Thêm tham số focusNode
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -2709,6 +2776,7 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
         controller: ctrl,
         maxLines: maxLines,
         keyboardType: keyboardType,
+        focusNode: focusNode, // Gán focusNode cho TextFormField
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: const TextStyle(color: Colors.black38),

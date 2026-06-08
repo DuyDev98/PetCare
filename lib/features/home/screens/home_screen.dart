@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'dart:ui' as ui;
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:geolocator/geolocator.dart';
 
 import 'package:pet_care/data/services/pet_service.dart';
 import 'package:pet_care/data/services/pet_photo_service.dart';
@@ -13,11 +17,16 @@ import 'package:pet_care/features/calendar/screens/calendar_screen.dart';
 import 'package:pet_care/features/medical/screens/so_y_ba_screen.dart';
 import 'package:pet_care/features/lost_and_found/screens/lost_pet_screen.dart';
 import 'package:pet_care/features/photo_history/screens/photo_detail_screen.dart';
+import 'package:pet_care/features/photo_history/screens/full_screen_gallery_screen.dart';
+import 'package:pet_care/services/user_service.dart';
+import 'package:pet_care/services/photo_service.dart';
+import 'package:pet_care/services/location_service.dart';
 
 import 'setup_profile_screen.dart';
 import 'settings_screen.dart';
 import 'community_screen.dart';
 import 'notification_screen.dart';
+import 'community_map_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ROOT SCREEN
@@ -120,7 +129,8 @@ class _HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<_HomeTab> {
   final ReminderService _reminderService = ReminderService();
-  final PetPhotoService _photoService    = PetPhotoService();
+  final PhotoService _photoService = PhotoService(); // Sử dụng PhotoService mới
+  final UserService _userService = UserService(); // Thêm UserService
 
   int _activePet     = 0;
   int _communityTab  = 0;
@@ -502,15 +512,19 @@ class _HomeTabState extends State<_HomeTab> {
           icon: Icons.location_on_outlined,
           label: 'Địa điểm',
           color: const Color(0xFF43A047),
-          onTap: () {},
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CommunityMapScreen()),
+          ),
         ),
       ],
     );
   }
 
-  // ── Thư viện ảnh (Ràng buộc theo petId) ───────────────────────────────────
+  // ── Thư viện ảnh (Sử dụng StreamBuilder để tự động cập nhật khi xóa) ───────────────────────────────────
   Widget _buildPhotoGalleryPreview(String petId) {
-    if (petId.isEmpty) return const SizedBox.shrink();
+    final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (userId.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -523,9 +537,7 @@ class _HomeTabState extends State<_HomeTab> {
                     color: Color(0xFF1F2937))),
             GestureDetector(
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Sẽ mở màn hình Gallery ảnh toàn màn hình')),
-                );
+                // Sẽ mở màn hình Gallery ảnh toàn màn hình
               },
               child: const Text('Xem tất cả',
                   style: TextStyle(fontSize: 13, color: AppColors.primary,
@@ -537,8 +549,8 @@ class _HomeTabState extends State<_HomeTab> {
         SizedBox(
           height: 120,
           child: StreamBuilder<List<PetPhotoModel>>(
-            // Sử dụng hàm chuyên biệt để lấy ảnh của đúng petId
-            stream: _photoService.getPhotosByPet(petId),
+            // Sử dụng PhotoService.getPhotoStream() để đồng bộ thời gian thực
+            stream: _photoService.getPhotoStream(userId: userId),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator(strokeWidth: 2));
@@ -548,30 +560,36 @@ class _HomeTabState extends State<_HomeTab> {
                 return Center(child: Text('Lỗi: ${snapshot.error}', style: const TextStyle(fontSize: 10)));
               }
 
-              final petPhotos = snapshot.data ?? [];
+              final photos = snapshot.data ?? [];
 
-              if (petPhotos.isEmpty) {
+              if (photos.isEmpty) {
                 return _buildEmptyGalleryState();
               }
 
               return ListView.builder(
                 scrollDirection: Axis.horizontal,
-                itemCount: petPhotos.length + 1,
+                itemCount: photos.length,
                 itemBuilder: (context, i) {
-                  if (i == 0) return _buildAddPhotoButton();
-
-                  final photo = petPhotos[i - 1];
+                  // Đã loại bỏ ô "Thêm ảnh" nét đứt theo yêu cầu
+                  final photo = photos[i];
                   return GestureDetector(
                     onTap: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => PhotoDetailScreen(photo: photo),
+                          builder: (context) => FullScreenGalleryScreen(
+                            photos: photos.map((p) => {
+                              'url': p.imageUrl,
+                              'date': p.timestamp,
+                              'id': p.id,
+                            }).toList(),
+                            initialIndex: i,
+                          ),
                         ),
                       );
                     },
                     child: Hero(
-                      tag: photo.id,
+                      tag: 'gallery_photo_${photo.imageUrl}',
                       child: Container(
                         width: 120,
                         margin: const EdgeInsets.only(right: 12),
@@ -605,54 +623,21 @@ class _HomeTabState extends State<_HomeTab> {
     );
   }
 
-  Widget _buildAddPhotoButton() {
-    return GestureDetector(
-      onTap: () {
-        // TODO: Mở picker chọn ảnh từ Camera/Gallery
-      },
-      child: Container(
-        width: 100,
-        margin: const EdgeInsets.only(right: 12),
-        decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.4), style: BorderStyle.solid),
-        ),
-        child: const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add_a_photo_outlined, color: AppColors.primary, size: 28),
-            SizedBox(height: 8),
-            Text('Thêm ảnh', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildEmptyGalleryState() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.shade100),
       ),
-      child: Row(
-        children: [
-          _buildAddPhotoButton(),
-          const Expanded(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Text(
-                'Thú cưng chưa có ảnh kỷ niệm nào từ lịch chăm sóc. Hãy thêm hoạt động để lưu giữ khoảnh khắc!',
-                style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.4),
-                textAlign: TextAlign.left,
-              ),
-            ),
-          ),
-        ],
+      child: const Center(
+        child: Text(
+          'Chưa có ảnh kỷ niệm nào. Hãy lưu lại những khoảnh khắc đẹp của thú cưng nhé!',
+          style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.4),
+          textAlign: TextAlign.center,
+        ),
       ),
     );
   }
@@ -960,31 +945,94 @@ class _HomeTabState extends State<_HomeTab> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Thành viên trong mạng lưới', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                RichText(text: TextSpan(children: [
-                  const TextSpan(text: '61', style: TextStyle(color: Color(0xFFFF9800), fontWeight: FontWeight.bold, fontSize: 14)),
-                  TextSpan(text: '/100', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                ])),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: const LinearProgressIndicator(value: 0.61, minHeight: 8, backgroundColor: Color(0xFFEEEEEE), valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF9800))),
-            ),
+          StreamBuilder<int>(
+            // Sử dụng StreamBuilder để đếm số người xung quanh thực tế (bán kính 5km)
+            stream: _userService.getNearbyUserCountStream(radiusInKm: 5.0),
+            builder: (context, snapshot) {
+              final nearbyCount = snapshot.data ?? 0;
+              final progress = (nearbyCount / 100).clamp(0.0, 1.0);
+
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Thành viên trong mạng lưới', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                        RichText(text: TextSpan(children: [
+                          TextSpan(text: '$nearbyCount', style: const TextStyle(color: Color(0xFFFF9800), fontWeight: FontWeight.bold, fontSize: 14)),
+                          TextSpan(text: '/100', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                        ])),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 8,
+                        backgroundColor: const Color(0xFFEEEEEE),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFF9800))
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
           ),
           GestureDetector(
             onTap: () => widget.onTabSwitch(4),
             child: ClipRRect(
               borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(24), bottomRight: Radius.circular(24)),
-              child: SizedBox(height: 175, width: double.infinity, child: CustomPaint(painter: _MockMapPainter())),
+              child: FutureBuilder<Position>(
+                future: LocationService().getCurrentPosition(),
+                builder: (context, snapshot) {
+                  // 1. ConnectionState == waiting: Hiển thị vòng xoay
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Container(
+                      height: 175,
+                      width: double.infinity,
+                      color: Colors.grey.shade100,
+                      child: const Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFFFF9800),
+                        ),
+                      ),
+                    );
+                  }
+
+                  // 2. Xác định tọa độ (data có sẵn hoặc fallback Hà Nội)
+                  LatLng center;
+                  if (snapshot.hasData) {
+                    center = LatLng(snapshot.data!.latitude, snapshot.data!.longitude);
+                  } else {
+                    // Fallback Hà Nội nếu lỗi hoặc không có dữ liệu
+                    center = const LatLng(21.0285, 105.8542);
+                  }
+
+                  // 3. Trả về FlutterMap với tọa độ đã xử lý
+                  return SizedBox(
+                    height: 175,
+                    width: double.infinity,
+                    child: FlutterMap(
+                      options: MapOptions(
+                        initialCenter: center,
+                        initialZoom: 14.5, // Chỉnh zoom 14.5 để thấy vùng lân cận
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.example.pet_care',
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ],
